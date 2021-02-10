@@ -194,6 +194,16 @@ public:
     }
     int copy_image(unsigned char *buf)
     {
+#ifdef TEST_JPEG_IMG
+        static int imgnum = 0;
+        char fname[30];
+        snprintf(fname, 30, "testimg/i%d.jpg", imgnum++);
+        unlink(fname);
+        FILE *fp = fopen(fname, "wb");
+        if (this->sz > 0)
+            fwrite(this->data, 1, this->sz, fp);
+        fclose(fp);
+#endif //TEST_JPEG_IMG
         if (this->sz > 0)
             memcpy(buf, this->data, this->sz);
         free(this->data);

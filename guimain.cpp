@@ -91,9 +91,9 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
    */
 
     /* Step 5: Start decompressor */
-    cinfo.out_color_space = JCS_GRAYSCALE;
-    cinfo.scale_num = 480; // scale to 480p
-    cinfo.scale_denom = cinfo.image_height;
+    cinfo.out_color_space = JCS_EXT_RGBX;
+    cinfo.scale_num = 640; // scale to 480p
+    cinfo.scale_denom = cinfo.image_width;
     (void)jpeg_start_decompress(&cinfo);
     fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     /* We may need to do some setup of our own at this point before reading
@@ -163,7 +163,7 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
 
     // Upload pixels into texture
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, image_data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data);
     fprintf(stderr, "%s: %d %d\n", __func__, __LINE__, image_texture);
     free(image_data);
     *out_texture = image_texture;

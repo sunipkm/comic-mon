@@ -230,8 +230,8 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
 
     /* Step 5: Start decompressor */
     cinfo.out_color_space = JCS_EXT_RGBX;
-    cinfo.scale_num = 480; // scale to 480p
-    cinfo.scale_denom = cinfo.image_height;
+    cinfo.scale_num = 640; // scale to 480p
+    cinfo.scale_denom = cinfo.image_width;
     (void)jpeg_start_decompress(&cinfo);
     fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     /* We may need to do some setup of our own at this point before reading
@@ -334,6 +334,25 @@ void MainWindow()
 void ImageWindow(bool *active)
 {
     ImGui::Begin("Image Display", active);
+    static char fname[256] = "test.jpeg";
+    if (ImGui::InputText("JPEG File", fname, sizeof(fname)))
+    {
+        FILE *fp = fopen(fname, "rb");
+        if (fp != NULL)
+        {
+            fseek(fp, 0L, SEEK_END);
+            ssize_t sz = ftell(fp);
+            fseek(fp, 0L, SEEK_SET);
+            unsigned char imgdata[sz] = {0x0, };
+            ssize_t readsz = 0;
+            if ((readsz = fread(imgdata, 1, sz, fp)) != sz)
+            {
+                fprintf(stderr, "%s: Error reading image file %s, %ld byts read out of %ld bytes\n", __func__, fname, readsz, sz);
+            }
+            LoadTextureFromMem(imgdata, sz, &mmy_image_texture, &mmy_image_width, &mmy_image_height);
+            fclose(fp);
+        }
+    }
     if (mmy_image_texture != NULL)
     {
         ImGui::Text("pointer = %p", mmy_image_texture);
