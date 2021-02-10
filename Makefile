@@ -16,7 +16,7 @@ endif
 
 UNAME_S := $(shell uname -s)
 
-CXXFLAGS:= -I include/ -I imgui/include -I imgui/include/imgui -I imgui/include/backend -I ./ -Wall -O2 -fpermissive -std=gnu++11
+CXXFLAGS:= -I include/ -I imgui/include -I imgui/libs/gl3w -DIMGUI_IMPL_OPENGL_LOADER_GL3W -I ./ -Wall -O2 -fpermissive -std=gnu++11
 LIBS = -lpthread -ljpeg
 
 ifeq ($(UNAME_S), Linux) #LINUX
