@@ -1,0 +1,4 @@
+A simple test program for C sockets using imgui backend. The backend is also built as a static library, please clone with --recurse-submodules to obtain
+my fork (a copy, with some Make magic and file rearrangements) of Omar Cornut's Dear ImGui (with glfw backend only).
+
+Execute make in the directory to compile. Requires libglfw3.
