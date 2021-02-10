@@ -159,7 +159,7 @@ public:
     {
         // convert grayscale data first
         unsigned char *gr_data = (unsigned char *)malloc(width * height);
-        this->data = (unsigned char *)malloc(1024*1024*4); // allocate 4M
+        this->data = (unsigned char *)malloc(1024 * 1024 * 4); // allocate 4M
         for (unsigned long long i = 0; i < width * height; i++)
         {
             gr_data[i] = data[i] / 256; // convert to 8 bit grayscale
@@ -481,17 +481,21 @@ void *cmd_fcn(void *img)
         pthread_mutex_lock(&net_img_lock);
         // cout << "Img: " << jpg->metadata->size << " bytes, metadata: " << sizeof(net_meta) << " bytes" << endl;
         int sz = 0;
-        int32_t out_sz = jpg->metadata->size + sizeof(net_meta);                           // total size = size of metadata + size of image
-        unsigned char *buf = (unsigned char *)malloc(out_sz + sizeof(int32_t));                // image size + image data area
-        memcpy(buf, &out_sz, sizeof(int32_t));                                                 // copy size of packet
-        memcpy(buf + sizeof(uint32_t), jpg->metadata, sizeof(net_meta));                   // copy metadata
-        memcpy(buf + sizeof(uint32_t) + sizeof(net_meta), jpg->data, jpg->metadata->size); // copy jpeg data
+        int32_t out_sz = jpg->metadata->size + sizeof(net_meta) + 18;        // total size = size of metadata + size of image + FBEGIN + FEND
+        unsigned char *buf = (unsigned char *)malloc(out_sz);                // image size + image data area
+        memcpy(buf, "SIZE", 4);
+        memcpy(buf + 4, &out_sz, 4);
+        memcpy(buf + 8, "FBEGIN", 6);                                            // copy FBEGIN
+        memcpy(buf + 14, jpg->metadata, sizeof(net_meta));                    // copy metadata
+        memcpy(buf + 14 + sizeof(net_meta), jpg->data, jpg->metadata->size);  // copy jpeg data
+        memcpy(buf + 14 + sizeof(net_meta) + jpg->metadata->size, "FEND", 4); // copy FEND
         pthread_mutex_unlock(&net_img_lock);
         if (jpg->metadata->size > 0)
         {
             sz = send(new_socket, buf, out_sz, MSG_NOSIGNAL);
             if (sz > 0)
-                cout << "Sent: " << sz << " bytes of " << out_sz << " bytes, image: " << jpg->metadata->size << " bytes" << endl << flush;
+                cout << "Sent: " << sz << " bytes of " << out_sz << " bytes, image: " << jpg->metadata->size << " bytes" << endl
+                     << flush;
         }
         else
             sz = -1;

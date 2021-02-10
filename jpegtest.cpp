@@ -335,7 +335,7 @@ void ImageWindow(bool *active)
 {
     ImGui::Begin("Image Display", active);
     static char fname[256] = "test.jpeg";
-    if (ImGui::InputText("JPEG File", fname, sizeof(fname)))
+    if (ImGui::InputText("JPEG File", fname, sizeof(fname), ImGuiInputTextFlags_EnterReturnsTrue))
     {
         FILE *fp = fopen(fname, "rb");
         if (fp != NULL)

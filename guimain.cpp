@@ -46,6 +46,9 @@ static void glfw_error_callback(int error, const char *description)
 
 #include <jpeglib.h>
 
+GLuint my_image_texture;
+int my_image_width, my_image_height;
+
 bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_texture, int *out_width, int *out_height)
 {
     // Load from file
@@ -104,7 +107,6 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
    */
     /* JSAMPLEs per row in output buffer */
     row_stride = cinfo.output_width * cinfo.output_components;
-    fprintf(stderr, "%s: output width: %d, output components: %d, row_stride: %d\n", __func__, cinfo.output_width, cinfo.output_components, row_stride);
     /* Make a one-row-high sample array that will go away when done with image */
     buffer = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, row_stride, 1);
 
@@ -175,9 +177,6 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
     return true;
 }
 
-GLuint my_image_texture;
-int my_image_width, my_image_height;
-
 volatile bool conn_rdy = false;
 
 typedef struct __attribute__((packed))
@@ -198,7 +197,46 @@ typedef struct
 
 net_image img;
 
-static char rcv_buf[1024 * 1024 * 4];
+static char rcv_buf[1024 * 1024];
+
+char *find_match(char *buf1, ssize_t len1, char *buf2, ssize_t len2)
+{
+    // fprintf(stderr, "%s: ", __func__);
+    // for (int i = 0; i < len2; i++)
+    //     fprintf(stderr, "%c", buf2[i]);
+    // fprintf(stderr, "\n");
+    bool matched = false;
+    ssize_t i = 0;
+    do
+    {
+        if (buf1[i] == buf2[0])
+        {
+            matched = true;
+            for (ssize_t j = 1; j < len2; j++)
+            {
+                // fprintf(stderr, "%s: %c %c\n", __func__, buf1[i + j], buf2[j]);
+                if (buf1[i + j] != buf2[j])
+                {
+                    matched = false;
+                    break;
+                }
+            }
+        }
+        if (++i >= len1)
+            break;
+    } while (!matched);
+    i--;
+    // fprintf(stderr, "%s: matched: %d, idx: %ld, string: ", __func__, matched, i);
+    // for (ssize_t j = 0; j < len2; j++)
+    //     fprintf(stderr, "%c", buf1[i+j]);
+    // fprintf(stderr, "\n");
+    if (matched)
+        return &(buf1[i]);
+    return NULL;
+}
+
+pthread_mutex_t lock;
+
 void *rcv_thr(void *sock)
 {
     img.metadata = (net_meta *)malloc(sizeof(net_meta));
@@ -206,36 +244,68 @@ void *rcv_thr(void *sock)
     memset(rcv_buf, 0x0, sizeof(rcv_buf));
     while (!done)
     {
-        fprintf(stderr, "%s: looping\n", __func__);
-        fflush(stderr);
+        memset(rcv_buf, 0x0, sizeof(rcv_buf));
         memset(img.metadata, 0x0, sizeof(net_meta));
         memset(img.data, 0x0, 1024 * 1024 * 4);
         usleep(1000 * 1000 / 30); // receive at 120 Hz
         if (conn_rdy)
         {
-            int32_t msg_sz = 0;
-            int sz = read(*(int *)sock, &msg_sz, sizeof(uint32_t));
-            if (sz <= 0)
-                continue;
-            if (sz == sizeof(uint32_t))
+            // char tmp_buf[8];
+            // ssize_t sz = recv(*(int *)sock, tmp_buf, sizeof(tmp_buf), 0);
+            // if (sz <= 0)
+            //     continue; // did not receive anything
+            // else
+            //     fprintf(stderr, "Received: %ld bytes\n", sz);
+            // fprintf(stderr, "Received: %c%c%c%c%d", tmp_buf[0], tmp_buf[1], tmp_buf[2], tmp_buf[3], *(int *)(&tmp_buf[4]));
+            // if (tmp_buf[0] == 'H' && tmp_buf[1] == 'E' && tmp_buf[2] == 'A' && tmp_buf[3] == 'D')
+            // {
+            //     sz = *(int32_t *)(&tmp_buf[4]);
+            //     fprintf(stderr, "Data to receive: %ld bytes\n", sz);
+            // }
+            // else
+            //     continue;
+            int offset = 0;
+            char *head = NULL, *tail = NULL;
+            do
             {
-                fprintf(stderr, "%s: Size = %d\n", __func__, msg_sz);
-                fflush(stderr);
-                if (msg_sz > 0 && msg_sz < 1024 * 1024 * 4)
+                int sz = recv(*(int *)sock, rcv_buf + offset, sizeof(rcv_buf) - offset, 0);
+                if (sz < 0)
+                    continue;
+                offset += sz;
+                head = find_match(rcv_buf, sizeof(rcv_buf), (char *)"FBEGIN", 6);
+                if (head != NULL)
+                    tail = find_match(head, sizeof(rcv_buf) - (head - rcv_buf), (char *)"FEND", 4);
+                // fprintf(stderr, "received: total %d bytes, head: %p, tail: %p\n", offset, (void *)(head), (void *)(tail));
+                // for (int i = 0; i < offset; i++)
+                //     fprintf(stderr, "%c", rcv_buf[i]);
+                // fprintf(stderr, "\n");
+                if (head != NULL && tail != NULL)
+                    break;
+            } while (conn_rdy);
+            if (head != NULL)
+            {
+                // fprintf(stderr, "%s: Head found at 0x%p\n", __func__, (void *)head);
+                if (tail != NULL && tail > head)
                 {
-                    sz = recv(*(int *)sock, rcv_buf, msg_sz, MSG_WAITALL);
-                }
-                if (sz == msg_sz)
-                {
-                    // pthread_mutex_lock(&(img.lock));
-                    memcpy(img.metadata, rcv_buf, sizeof(net_meta));
+                    // fprintf(stderr, "%s: Tail found at 0x%p\n", __func__, (void *)tail);
+                    pthread_mutex_lock(&lock);
+                    memcpy(img.metadata, head + 6, sizeof(net_meta));
+                    fprintf(stderr, "Tstamp: %lu\n", img.metadata->tstamp);
+                    fprintf(stderr, "Width: %u\n", img.metadata->width);
+                    fprintf(stderr, "Hidth: %u\n", img.metadata->height);
+                    fprintf(stderr, "Temp: %f\n", img.metadata->temp);
+                    fprintf(stderr, "JPEG Size: %d\n", img.metadata->size);
                     if (img.metadata->size > 0)
                     {
-                        fprintf(stderr, "%s: Image Size = %d\n", __func__, img.metadata->size);
-                        fflush(stderr);
-                        memcpy(img.data, rcv_buf + sizeof(net_meta), img.metadata->size);
-                        // pthread_mutex_unlock(&(img.lock));
-                        LoadTextureFromMem(img.data, img.metadata->size, &my_image_texture, &my_image_width, &my_image_height);
+                        memcpy(img.data, head + 6 + sizeof(net_meta), img.metadata->size);
+                        unsigned char jpegdata[img.metadata->size];
+                        memcpy(jpegdata, head + 6 + sizeof(net_meta), img.metadata->size);
+                        LoadTextureFromMem(jpegdata, img.metadata->size, &my_image_texture, &my_image_width, &my_image_height);
+                    }
+                    pthread_mutex_unlock(&lock);
+                    if (head + 6 + sizeof(net_meta) + img.metadata->size != tail)
+                    {
+                        fprintf(stderr, "Head + data does not match tail: 0x%p and 0x%p\n", (void *)(head + 6 + sizeof(net_meta) + img.metadata->size), (void *)tail);
                     }
                 }
             }
@@ -327,6 +397,16 @@ int main(int, char **)
         fprintf(stderr, "main: Could not create receiver thread! Exiting...\n");
         goto end;
     }
+    // Create a OpenGL texture identifier
+    glGenTextures(1, &my_image_texture);
+    glBindTexture(GL_TEXTURE_2D, my_image_texture);
+
+    // Setup filtering parameters for display
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // Upload pixels into texture
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
@@ -398,12 +478,28 @@ int main(int, char **)
             }
             if (conn_rdy && sock > 0)
             {
-                if (my_image_texture != NULL)
-                {
-                    ImGui::Text("pointer = %p", my_image_texture);
-                    ImGui::Text("size = %d x %d", my_image_width, my_image_height);
-                    ImGui::Image((void *)(intptr_t)my_image_texture, ImVec2(my_image_width, my_image_height));
-                }
+                // pthread_mutex_lock(&lock);
+                // if (img.metadata->size > 0)
+                // {
+                //     // char fname[256];
+                //     // static int ctr = 0;
+                //     // snprintf(fname, 256, "imgdata/img%d.jpg", ctr++);
+                //     // unlink(fname);
+                //     // FILE *fp = fopen(fname, "wb");
+                //     // if (fp != NULL)
+                //     // {
+                //     //     fwrite(img.data, 1, img.metadata->size, fp);
+                //     //     fclose(fp);
+                //     // }
+                //     LoadTextureFromMem(img.data, img.metadata->size, &my_image_texture, &my_image_width, &my_image_height);
+                // }
+                // pthread_mutex_unlock(&lock);
+                // if (my_image_texture != NULL)
+                // {
+                ImGui::Text("pointer = %p", my_image_texture);
+                ImGui::Text("size = %d x %d", my_image_width, my_image_height);
+                ImGui::Image((void *)(intptr_t)my_image_texture, ImVec2(my_image_width, my_image_height));
+                // }
             }
             ImGui::End();
         }
