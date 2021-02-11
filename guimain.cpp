@@ -64,6 +64,8 @@ static void glfw_error_callback(int error, const char *description)
 
 #include <jpeglib.h>
 
+pthread_mutex_t texture_lock;
+
 GLuint my_image_texture;
 int my_image_width, my_image_height;
 
@@ -178,19 +180,21 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
     glBindTexture(GL_TEXTURE_2D, image_texture);
 
     // Setup filtering parameters for display
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     // Upload pixels into texture
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, image_width, image_height, 0, GL_RED, GL_UNSIGNED_BYTE, image_data);
     fprintf(stderr, "%s: %d %d\n", __func__, __LINE__, image_texture);
     free(image_data);
+    pthread_mutex_lock(&texture_lock);
     *out_texture = image_texture;
     fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     *out_width = image_width;
     fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     *out_height = image_height;
+    pthread_mutex_unlock(&texture_lock);
     fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     return true;
 }
@@ -552,9 +556,11 @@ int main(int, char **)
                 // pthread_mutex_unlock(&lock);
                 // if (my_image_texture != NULL)
                 // {
+                pthread_mutex_lock(&texture_lock);
                 ImGui::Text("pointer = %p", my_image_texture);
                 ImGui::Text("size = %d x %d", my_image_width, my_image_height);
                 ImGui::Image((void *)(intptr_t)my_image_texture, ImVec2(my_image_width, my_image_height));
+                pthread_mutex_unlock(&texture_lock);
                 // }
             }
             ImGui::End();

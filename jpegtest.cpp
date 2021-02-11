@@ -318,15 +318,71 @@ int my_image_width, my_image_height;
 GLuint mmy_image_texture;
 int mmy_image_width, mmy_image_height;
 
+GLuint rand_image_texture;
+int rand_image_width, rand_image_height;
+pthread_mutex_t rand_image_lock;
+
 bool ImageWindowStat = false;
 bool CamWindowStat = false;
-bool enable_camera = false;
+bool RandImageWinStat = false;
+
+void *rand_img_func(void *_done)
+{
+    static int _x = 512, _y = 512;
+    while (!(*(int *)_done))
+    {
+        // texture map
+        unsigned char img[_x * _y] = {
+            0x0,
+        }; // new memory region
+        if (RandImageWinStat)
+        {
+            // printf("\n\n");
+            for (int i = 0; i < _y; i++)
+            {
+                for (int j = 0; j < _x; j++)
+                {
+                    img[i * j] = rand() % 0x100; // build up image
+                    // printf("%02x ", img[i * j]);
+                }
+                // printf("\n");
+            }
+            // bind image
+            pthread_mutex_lock(&rand_image_lock);
+            // glBindTexture(GL_TEXTURE_2D, rand_image_texture);
+            // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, _x, _y, 0, GL_RED, GL_UNSIGNED_BYTE, img);
+            pthread_mutex_unlock(&rand_image_lock);
+        }
+        rand_image_height = _y;
+        rand_image_width = _x;
+        usleep(500000); // 2 Hz
+    }
+    printf("Closing thread\n");
+    return NULL;
+}
+
+void RandImageWindow(bool *active)
+{
+    ImGui::Begin("Random Image Display", active);
+    if (rand_image_texture != NULL)
+    {
+        pthread_mutex_lock(&rand_image_lock);
+        ImGui::Text("pointer = %p", rand_image_texture);
+        ImGui::Text("size = %d x %d", rand_image_width, rand_image_height);
+        ImGui::Image((void *)(intptr_t)rand_image_texture, ImVec2(rand_image_width, rand_image_height));
+        pthread_mutex_unlock(&rand_image_lock);
+    }
+    ImGui::End();
+}
 
 void MainWindow()
 {
     bool dummy = false;
     ImGui::Begin("Main Window");
     ImGui::Checkbox("Display Image", &ImageWindowStat);
+    ImGui::Checkbox("Display Random", &RandImageWinStat);
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
     ImGui::End();
 }
@@ -343,7 +399,9 @@ void ImageWindow(bool *active)
             fseek(fp, 0L, SEEK_END);
             ssize_t sz = ftell(fp);
             fseek(fp, 0L, SEEK_SET);
-            unsigned char imgdata[sz] = {0x0, };
+            unsigned char imgdata[sz] = {
+                0x0,
+            };
             ssize_t readsz = 0;
             if ((readsz = fread(imgdata, 1, sz, fp)) != sz)
             {
@@ -394,7 +452,18 @@ int main(int argc, char *argv[])
     io.Fonts->AddFontFromFileTTF("imgui/font/Roboto-Medium.ttf", 14.0f);
 
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
+    // init rand tex
+    glGenTextures(1, &rand_image_texture);
+    glBindTexture(GL_TEXTURE_2D, rand_image_texture);
+    // Setup filtering parameters for display
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    // set up thread
+    pthread_t rand_img_thr;
+    static int done = 0;
+    int rc = pthread_create(&rand_img_thr, NULL, &rand_img_func, (void *)&done);
+    if (rc < 0)
+        printf("Could not create thread\n");
     // LoadTextureFromFile("test.jpeg", &mmy_image_texture, &mmy_image_width, &mmy_image_height);
     FILE *fp = fopen("test.jpeg", "rb");
     fseek(fp, 0L, SEEK_END);
@@ -422,6 +491,8 @@ int main(int argc, char *argv[])
         MainWindow();
         if (ImageWindowStat)
             ImageWindow(&ImageWindowStat);
+        if (RandImageWinStat)
+            RandImageWindow(&RandImageWinStat);
         // Rendering
         ImGui::Render();
         int display_w, display_h;
@@ -448,5 +519,8 @@ int main(int argc, char *argv[])
 
     glfwDestroyWindow(window);
     glfwTerminate();
+
+    done = 1;
+    pthread_join(rand_img_thr, NULL);
     return 0;
 }
