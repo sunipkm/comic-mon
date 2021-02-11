@@ -47,6 +47,10 @@ const ImVec4 IMMGN = ImVec4(1, 0, 1, 1);
 
 #include <jpeglib.h>
 
+#ifndef JCS_EXT_RGBX
+#define JCS_EXT_RGBX 7
+#endif
+
 // Simple helper function to load an image into a OpenGL texture with common settings
 bool LoadTextureFromFile(const char *filename, GLuint *out_texture, int *out_width, int *out_height)
 {
@@ -332,9 +336,7 @@ void *rand_img_func(void *_done)
     while (!(*(int *)_done))
     {
         // texture map
-        unsigned char img[_x * _y] = {
-            0x0,
-        }; // new memory region
+        unsigned char *img = (unsigned char *)malloc(_x * _y);
         if (RandImageWinStat)
         {
             // printf("\n\n");
@@ -355,6 +357,7 @@ void *rand_img_func(void *_done)
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, _x, _y, 0, GL_RED, GL_UNSIGNED_BYTE, img);
             pthread_mutex_unlock(&rand_image_lock);
         }
+        free(img);
         rand_image_height = _y;
         rand_image_width = _x;
         usleep(500000); // 2 Hz
@@ -399,15 +402,14 @@ void ImageWindow(bool *active)
             fseek(fp, 0L, SEEK_END);
             ssize_t sz = ftell(fp);
             fseek(fp, 0L, SEEK_SET);
-            unsigned char imgdata[sz] = {
-                0x0,
-            };
+            unsigned char *imgdata = (unsigned char *)malloc(sz);
             ssize_t readsz = 0;
             if ((readsz = fread(imgdata, 1, sz, fp)) != sz)
             {
                 fprintf(stderr, "%s: Error reading image file %s, %ld byts read out of %ld bytes\n", __func__, fname, readsz, sz);
             }
             LoadTextureFromMem(imgdata, sz, &mmy_image_texture, &mmy_image_width, &mmy_image_height);
+            free(imgdata);
             fclose(fp);
         }
     }
