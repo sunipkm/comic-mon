@@ -104,7 +104,7 @@ bool LoadTextureFromFile(const char *filename, GLuint *out_texture, int *out_wid
    */
 
     /* Step 5: Start decompressor */
-    cinfo.out_color_space = JCS_EXT_RGBX;
+    cinfo.out_color_space = (J_COLOR_SPACE) JCS_EXT_RGBX;
     cinfo.scale_num = 768;
     cinfo.scale_denom = cinfo.image_height;
     (void)jpeg_start_decompress(&cinfo);
@@ -233,7 +233,7 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
    */
 
     /* Step 5: Start decompressor */
-    cinfo.out_color_space = JCS_EXT_RGBX;
+    cinfo.out_color_space = (J_COLOR_SPACE) JCS_EXT_RGBX;
     cinfo.scale_num = 640; // scale to 480p
     cinfo.scale_denom = cinfo.image_width;
     (void)jpeg_start_decompress(&cinfo);
