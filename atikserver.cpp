@@ -489,8 +489,7 @@ void *cmd_fcn(void *img)
         {
             sz = send(new_socket, buf, out_sz, MSG_NOSIGNAL);
             if (sz > 0)
-                cout << "Sent: " << sz << " bytes of " << out_sz << " bytes, image: " << jpg->metadata->size << " bytes" << endl
-                     << flush;
+                cout << "Sent: " << sz << " bytes of " << out_sz << " bytes, image: " << jpg->metadata->size << " bytes" << endl;
         }
         else
             sz = -1;
@@ -639,33 +638,24 @@ int main(int argc, char *argv[])
         float temp = 0;
         if (!done)
             success = device->getTemperatureSensorStatus(1, &temp);
-        cout << "temp measured" << endl
-             << flush;
+        cout << "temp measured" << endl;
         jpeg_image img;
         img.convert_jpeg_image(tmp, width, height);
-        cout << "jpeg created" << endl
-             << flush;
+        cout << "jpeg created" << endl;
         pthread_mutex_lock(&net_img_lock);
-        cout << "mutex lock" << endl
-             << flush;
+        cout << "mutex lock" << endl;
         ext_img->metadata->temp = temp;
-        cout << "CCD temp: " << ext_img->metadata->temp << " C" << endl
-             << flush;
+        cout << "CCD temp: " << ext_img->metadata->temp << " C" << endl;
         ext_img->metadata->tstamp = tnow.usec();
-        cout << "Tstamp: " << ext_img->metadata->tstamp << endl
-             << flush;
+        cout << "Tstamp: " << ext_img->metadata->tstamp << endl;
         ext_img->metadata->height = height;
-        cout << "Height: " << ext_img->metadata->height << endl
-             << flush;
+        cout << "Height: " << ext_img->metadata->height << endl;
         ext_img->metadata->width = width;
-        cout << "Width: " << ext_img->metadata->width << endl
-             << flush;
+        cout << "Width: " << ext_img->metadata->width << endl;
         ext_img->metadata->exposure = exposure;
-        cout << "Exposure: " << ext_img->metadata->exposure << endl
-             << flush;
+        cout << "Exposure: " << ext_img->metadata->exposure << endl;
         ext_img->metadata->size = img.copy_image(ext_img->data);
-        cout << "Size: " << ext_img->metadata->size << endl
-             << flush;
+        cout << "Size: " << ext_img->metadata->size << endl;
         pthread_mutex_unlock(&net_img_lock);
         if (!done)
             exposure = find_optimum_exposure(tmp, width * height, exposure);
