@@ -36,8 +36,8 @@ extern "C"
 
 using namespace std;
 
-#define TIME_NSEC 1000000000
-#define TIME_USEC 1000000
+#define TIME_NSEC (uint64_t)1000000000
+#define TIME_USEC (uint64_t)1000000
 /**
  * @brief Class to obtain current system time
  * 
@@ -51,7 +51,7 @@ public:
      * 
      * @return long long int timestamp in nanoseconds
      */
-    long long int nsec()
+    uint64_t nsec()
     {
         return this->ts.tv_sec * TIME_NSEC + this->ts.tv_nsec;
     }
@@ -60,7 +60,7 @@ public:
      * 
      * @return long long int timestamp in microseconds
      */
-    long long int usec()
+    uint64_t usec()
     {
         return this->ts.tv_sec * TIME_USEC + this->ts.tv_nsec / 1000 + (this->ts.tv_nsec % 1000 > 500 ? TIME_USEC : 0);
     }
