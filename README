@@ -2,3 +2,5 @@ A simple test program for C sockets using imgui backend. The backend is also bui
 my fork (a copy, with some Make magic and file rearrangements) of Omar Cornut's Dear ImGui (with glfw backend only).
 
 Execute make in the directory to compile. Requires libglfw3.
+
+The master branch contains the OpenGL2 version, and the opengl2 branch contains the OpenGL3 version.
