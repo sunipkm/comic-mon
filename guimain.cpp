@@ -8,8 +8,10 @@
 // See imgui_impl_glfw.cpp for details.
 
 #include <stdio.h>
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
@@ -503,8 +505,11 @@ int main(int, char **)
                     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
                     {
                         printf("\n Socket creation error \n");
-                        return -1;
+                        fflush(stdout);
+                        // return -1;
                     }
+                    else
+                        fcntl(sock, F_SETFL, O_NONBLOCK); // set the socket non-blocking on macOS
                     if (inet_pton(AF_INET, ipaddr, &serv_addr.sin_addr) <= 0)
                     {
                         printf("\nInvalid address/ Address not supported \n");
@@ -514,7 +519,9 @@ int main(int, char **)
                         printf("\nConnection Failed \n");
                     }
                     else
+                    {
                         conn_rdy = true;
+                    }
                 }
             }
             else
