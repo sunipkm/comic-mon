@@ -47,6 +47,24 @@ const ImVec4 IMMGN = ImVec4(1, 0, 1, 1);
 
 #include <jpeglib.h>
 
+void InitTexture(GLuint &image_texture)
+{
+    glGenTextures(1, &image_texture);
+    glBindTexture(GL_TEXTURE_2D, image_texture);
+
+    // Setup filtering parameters for display
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    return;
+}
+
+void AssignTexture(GLuint &image_texture, unsigned char *data, unsigned image_width, unsigned image_height)
+{
+    glBindTexture(GL_TEXTURE_2D, image_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    return;
+}
+
 // Simple helper function to load an image into a OpenGL texture with common settings
 bool LoadTextureFromFile(const char *filename, GLuint *out_texture, int *out_width, int *out_height)
 {
@@ -171,7 +189,7 @@ bool LoadTextureFromFile(const char *filename, GLuint *out_texture, int *out_wid
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     // Upload pixels into texture
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    // glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data);
     fprintf(stderr, "%s: %d %d\n", __func__, __LINE__, image_texture);
     free(image_data);
@@ -299,7 +317,7 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     // Upload pixels into texture
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    // glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data);
     fprintf(stderr, "%s: %d %d\n", __func__, __LINE__, image_texture);
     free(image_data);
@@ -330,6 +348,8 @@ unsigned char *imgval = NULL;
 void *rand_img_func(void *_done)
 {
     static int _x = 512, _y = 512;
+    rand_image_height = _y;
+    rand_image_width = _x;
     imgval = (unsigned char *)malloc(_x * _y * 4);
     for (int i = 0; i < _y; i++)
     {
@@ -359,21 +379,19 @@ void *rand_img_func(void *_done)
                             imgval[i * _x * 4 + j * 4 + k] = rand(); // these are the color channels
                         else
                             imgval[i * _x * 4 + j * 4 + k] = 0xff; // this is the alpha channel
-                    } // build up image
+                    }                                              // build up image
                 }
                 // printf("\n");
             }
-
+            // AssignTexture(rand_image_texture, imgval, 512, 512);
             // glBindTexture(GL_TEXTURE_2D, rand_image_texture);
             // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
             // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, _x, _y, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid *)imgval);
             // glBindTexture(GL_TEXTURE_2D, rand_image_texture);
             // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, rand_image_width, rand_image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid *)imgval);
-            pthread_mutex_unlock(&rand_image_lock);
+            // pthread_mutex_unlock(&rand_image_lock);
         }
-        rand_image_height = _y;
-        rand_image_width = _x;
         pthread_mutex_unlock(&rand_image_lock);
         usleep(17000); // 60 Hz
     }
@@ -388,8 +406,9 @@ void RandImageWindow(bool *active)
     if (rand_image_texture != NULL)
     {
         pthread_mutex_lock(&rand_image_lock);
-        glBindTexture(GL_TEXTURE_2D, rand_image_texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, rand_image_width, rand_image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid *)imgval);
+        AssignTexture(rand_image_texture, imgval, rand_image_width, rand_image_height);
+        // glBindTexture(GL_TEXTURE_2D, rand_image_texture);
+        // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, rand_image_width, rand_image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid *)imgval);
         ImGui::Text("pointer = %p", rand_image_texture);
         ImGui::Text("size = %d x %d", rand_image_width, rand_image_height);
         ImGui::Image((void *)(intptr_t)rand_image_texture, ImVec2(rand_image_width, rand_image_height));
@@ -473,11 +492,12 @@ int main(int argc, char *argv[])
 
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
     // init rand tex
-    glGenTextures(1, &rand_image_texture);
-    glBindTexture(GL_TEXTURE_2D, rand_image_texture);
-    // Setup filtering parameters for display
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    InitTexture(rand_image_texture);
+    // glGenTextures(1, &rand_image_texture);
+    // glBindTexture(GL_TEXTURE_2D, rand_image_texture);
+    // // Setup filtering parameters for display
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     // set up thread
     pthread_t rand_img_thr;
     static int done = 0;
