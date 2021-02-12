@@ -532,9 +532,9 @@ int main(int, char **)
             if (conn_rdy && sock > 0)
             {
                 pthread_mutex_lock(&texture_lock);
-                struct timespec tstamp;
+                struct timeval tstamp;
                 tstamp.tv_sec = img.metadata->tstamp/(uint64_t) 1000000;
-                tstamp.tv_nsec = (img.metadata->tstamp % 1000000) * 1000;
+                tstamp.tv_usec = (img.metadata->tstamp % 1000000);
                 struct tm ts;
                 char buf[80];
 

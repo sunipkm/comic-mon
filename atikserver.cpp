@@ -1,6 +1,7 @@
 // Server side C/C++ program to demonstrate Socket programming
 #include <unistd.h>
 #include <stdio.h>
+#include <sys/time.h>
 #include <sys/socket.h>
 #include <stdlib.h>
 #include <netinet/in.h>
@@ -45,16 +46,7 @@ using namespace std;
 class systime
 {
 public:
-    struct timespec ts;
-    /**
-     * @brief Return timestamp in nanoseconds
-     * 
-     * @return long long int timestamp in nanoseconds
-     */
-    uint64_t nsec()
-    {
-        return this->ts.tv_sec * TIME_NSEC + this->ts.tv_nsec;
-    }
+    struct timeval ts;
     /**
      * @brief Return timestamp to microsecond (nearest)
      * 
@@ -62,20 +54,20 @@ public:
      */
     uint64_t usec()
     {
-        return this->ts.tv_sec * TIME_USEC + this->ts.tv_nsec / 1000 + (this->ts.tv_nsec % 1000 > 500 ? TIME_USEC : 0);
+        return this->ts.tv_sec * TIME_USEC + this->ts.tv_usec;
     }
     systime operator-(struct systime &ts2)
     {
         struct systime tmp;
         tmp.ts.tv_sec = this->ts.tv_sec - ts2.ts.tv_sec;
-        tmp.ts.tv_nsec = this->ts.tv_nsec - ts2.ts.tv_nsec;
+        tmp.ts.tv_usec = this->ts.tv_usec - ts2.ts.tv_usec;
         return tmp;
     }
     void operator-=(struct systime &ts2)
     {
         struct systime tmp;
         this->ts.tv_sec -= ts2.ts.tv_sec;
-        this->ts.tv_nsec -= ts2.ts.tv_nsec;
+        this->ts.tv_usec -= ts2.ts.tv_usec;
     }
     /**
      * @brief Store the current timestamp
@@ -83,7 +75,7 @@ public:
      */
     void now()
     {
-        clock_gettime(CLOCK_MONOTONIC, &(this->ts));
+        gettimeofday(&(this->ts), NULL);
     }
     /**
      * @brief Construct a new systime object, and store current time
@@ -91,7 +83,7 @@ public:
      */
     systime()
     {
-        clock_gettime(CLOCK_MONOTONIC, &(this->ts));
+        gettimeofday(&(this->ts), NULL);
     }
 };
 
