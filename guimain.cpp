@@ -92,20 +92,21 @@ int my_image_width, my_image_height;
 typedef struct
 {
     unsigned char *data;
+    unsigned max_size;
     unsigned width;
     unsigned height;
 } imagedata;
 
 bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, imagedata *image)
 {
-    if (len <= 0 || in_jpeg == NULL)
+    if (len <= 0 || in_jpeg == NULL || image->data == NULL || image->max_size == 0)
     {
         return false;
     }
     // Load from file
     int image_width = 0;
     int image_height = 0;
-    unsigned char *image_data;
+    unsigned char *image_data = image->data;
 
     struct jpeg_decompress_struct cinfo;
     struct jpeg_error_mgr jerr;
@@ -160,10 +161,14 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, imagedata *im
     /* Here we use the library's state variable cinfo.output_scanline as the
    * loop counter, so that we don't have to keep track ourselves.
    */
-    image_data = (unsigned char *)malloc(row_stride * cinfo.output_height);
+    int loc = 0;
+    if (image->max_size < row_stride * cinfo.output_height)
+    {
+        printf("%s: Required memory for raw image: %lu, allocated: %lu\n", row_stride * cinfo.output_height, image->max_size);
+        goto jpeg_end;
+    }
     image_height = cinfo.output_height;
     image_width = cinfo.output_width;
-    int loc = 0;
     while (cinfo.output_scanline < cinfo.output_height)
     {
         /* jpeg_read_scanlines expects an array of pointers to scanlines.
@@ -177,7 +182,7 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, imagedata *im
     }
 
     /* Step 7: Finish decompression */
-
+jpeg_end:
     (void)jpeg_finish_decompress(&cinfo);
     /* We can ignore the return value since suspension is not possible
    * with the stdio data source.
@@ -192,10 +197,7 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, imagedata *im
    * so as to simplify the setjmp error logic above.  (Actually, I don't
    * think that jpeg_destroy can do an error exit, but why assume anything...)
    */
-    if (image_data == NULL)
-        return false;
 
-    image->data = image_data;
     image->height = image_height;
     image->width = image_width;
     return true;
@@ -535,7 +537,7 @@ int main(int, char **)
             {
                 pthread_mutex_lock(&texture_lock);
                 struct timeval tstamp;
-                tstamp.tv_sec = img.metadata->tstamp/(uint64_t) 1000000;
+                tstamp.tv_sec = img.metadata->tstamp / (uint64_t)1000000;
                 tstamp.tv_usec = (img.metadata->tstamp % 1000000);
                 struct tm ts;
                 char buf[80];
@@ -545,10 +547,13 @@ int main(int, char **)
                 strftime(buf, sizeof(buf), "%a %Y-%m-%d %H:%M:%S %Z", &ts);
                 ImGui::Text("Timestamp: %s", buf);
                 imagedata live_image;
+                live_image.data = (unsigned char *)malloc(1024*1024*4*2);
+                live_image.max_size = 1024*1024*4*2;
                 LoadTextureFromMem(img.data, (img.metadata->size), &live_image);
                 float w = ImGui::GetContentRegionAvailWidth();
                 float h = w * (live_image.height * 1.0 / live_image.width);
                 AssignTexture(my_image_texture, live_image.data, live_image.width, live_image.height);
+                free(live_image.data);
                 ImGui::Image((void *)(intptr_t)my_image_texture, ImVec2(w, h));
                 pthread_mutex_unlock(&texture_lock);
             }
