@@ -164,7 +164,7 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, imagedata *im
     int loc = 0;
     if (image->max_size < row_stride * cinfo.output_height)
     {
-        printf("%s: Required memory for raw image: %lu, allocated: %lu\n", row_stride * cinfo.output_height, image->max_size);
+        printf("%s: Required memory for raw image: %u, allocated: %u\n", __func__, row_stride * cinfo.output_height, image->max_size);
         goto jpeg_end;
     }
     image_height = cinfo.output_height;
@@ -545,10 +545,10 @@ int main(int, char **)
                 // Format time, "ddd yyyy-mm-dd hh:mm:ss zzz"
                 ts = *localtime(&tstamp.tv_sec);
                 strftime(buf, sizeof(buf), "%a %Y-%m-%d %H:%M:%S %Z", &ts);
-                ImGui::Text("Timestamp: %s", buf);
+                ImGui::Text(u8"Timestamp: %s | Exposure: %.3f s | CCD Temp: %.2f °C", buf, img.metadata->exposure, img.metadata->temp);
                 imagedata live_image;
-                live_image.data = (unsigned char *)malloc(1024*1024*4*2);
                 live_image.max_size = 1024*1024*4*2;
+                live_image.data = (unsigned char *)malloc(live_image.max_size);
                 LoadTextureFromMem(img.data, (img.metadata->size), &live_image);
                 float w = ImGui::GetContentRegionAvailWidth();
                 float h = w * (live_image.height * 1.0 / live_image.width);
