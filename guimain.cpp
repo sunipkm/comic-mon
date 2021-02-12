@@ -98,6 +98,8 @@ typedef struct
 
 bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, imagedata *image)
 {
+    if (len <= 0 || in_jpeg == NULL)
+        return false;
     // Load from file
     int image_width = 0;
     int image_height = 0;
@@ -266,11 +268,12 @@ char *find_match(char *buf1, ssize_t len1, char *buf2, ssize_t len2)
 }
 
 pthread_mutex_t lock;
-
+unsigned char *jpegdata;
 void *rcv_thr(void *sock)
 {
     img.metadata = (net_meta *)malloc(sizeof(net_meta));
     img.data = (unsigned char *)malloc(1024 * 1024 * 4);
+    jpegdata = (unsigned char *)malloc(1024 * 1024 * 4);
     memset(rcv_buf, 0x0, sizeof(rcv_buf));
     while (!done)
     {
@@ -328,6 +331,17 @@ void *rcv_thr(void *sock)
                     if (img.metadata->size > 0)
                     {
                         memcpy(img.data, head + 6 + sizeof(net_meta), img.metadata->size);
+                        memcpy(jpegdata, head + 6 + sizeof(net_meta), img.metadata->size);
+                        char fname[256];
+                        static int imgnum = 0;
+                        snprintf(fname, 256, "imgdata/img%d.jpg", imgnum++);
+                        unlink(fname);
+                        FILE *fp = fopen(fname, "wb");
+                        if (fp != NULL)
+                        {
+                            fwrite(jpegdata, 1, img.metadata->size, fp);
+                            fclose(fp);
+                        }
                     }
                     pthread_mutex_unlock(&lock);
                     if (head + 6 + sizeof(net_meta) + img.metadata->size != tail)
@@ -340,6 +354,7 @@ void *rcv_thr(void *sock)
     }
     free(img.metadata);
     free(img.data);
+    free(jpegdata);
     return NULL;
 }
 
@@ -542,6 +557,7 @@ int main(int, char **)
             {
                 pthread_mutex_lock(&texture_lock);
                 imagedata live_image;
+                // if (img.metadata->size > 0)
                 LoadTextureFromMem(img.data, img.metadata->size, &live_image);
                 AssignTexture(my_image_texture, live_image.data, live_image.width, live_image.height);
                 ImGui::Text("pointer = %p", my_image_texture);
