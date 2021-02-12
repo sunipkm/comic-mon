@@ -1,6 +1,7 @@
 // Server side C/C++ program to demonstrate Socket programming
 #include <unistd.h>
 #include <stdio.h>
+#include <sys/time.h>
 #include <sys/socket.h>
 #include <stdlib.h>
 #include <netinet/in.h>
@@ -36,8 +37,8 @@ extern "C"
 
 using namespace std;
 
-#define TIME_NSEC 1000000000
-#define TIME_USEC 1000000
+#define TIME_NSEC (uint64_t)1000000000
+#define TIME_USEC (uint64_t)1000000
 /**
  * @brief Class to obtain current system time
  * 
@@ -45,37 +46,28 @@ using namespace std;
 class systime
 {
 public:
-    struct timespec ts;
-    /**
-     * @brief Return timestamp in nanoseconds
-     * 
-     * @return long long int timestamp in nanoseconds
-     */
-    long long int nsec()
-    {
-        return this->ts.tv_sec * TIME_NSEC + this->ts.tv_nsec;
-    }
+    struct timeval ts;
     /**
      * @brief Return timestamp to microsecond (nearest)
      * 
      * @return long long int timestamp in microseconds
      */
-    long long int usec()
+    uint64_t usec()
     {
-        return this->ts.tv_sec * TIME_USEC + this->ts.tv_nsec / 1000 + (this->ts.tv_nsec % 1000 > 500 ? TIME_USEC : 0);
+        return this->ts.tv_sec * TIME_USEC + this->ts.tv_usec;
     }
     systime operator-(struct systime &ts2)
     {
         struct systime tmp;
         tmp.ts.tv_sec = this->ts.tv_sec - ts2.ts.tv_sec;
-        tmp.ts.tv_nsec = this->ts.tv_nsec - ts2.ts.tv_nsec;
+        tmp.ts.tv_usec = this->ts.tv_usec - ts2.ts.tv_usec;
         return tmp;
     }
     void operator-=(struct systime &ts2)
     {
         struct systime tmp;
         this->ts.tv_sec -= ts2.ts.tv_sec;
-        this->ts.tv_nsec -= ts2.ts.tv_nsec;
+        this->ts.tv_usec -= ts2.ts.tv_usec;
     }
     /**
      * @brief Store the current timestamp
@@ -83,7 +75,7 @@ public:
      */
     void now()
     {
-        clock_gettime(CLOCK_MONOTONIC, &(this->ts));
+        gettimeofday(&(this->ts), NULL);
     }
     /**
      * @brief Construct a new systime object, and store current time
@@ -91,7 +83,7 @@ public:
      */
     systime()
     {
-        clock_gettime(CLOCK_MONOTONIC, &(this->ts));
+        gettimeofday(&(this->ts), NULL);
     }
 };
 
@@ -144,6 +136,7 @@ typedef struct
     unsigned width;
     unsigned height;
     float temp;
+    float exposure;
     unsigned long long tstamp;
 } comic_image;
 
@@ -226,6 +219,7 @@ typedef struct __attribute__((packed))
     unsigned width;
     unsigned height;
     float temp;
+    float exposure;
     uint64_t tstamp;
     int size;
 } net_meta;
@@ -368,7 +362,8 @@ double find_optimum_exposure(unsigned short *picdata, unsigned int imgsize, doub
 
     if (result > MAX_ALLOWED_EXPOSURE)
         result = MAX_ALLOWED_EXPOSURE;
-
+    // round to 1 ms
+    result = ((int)(result * 1000))/1000.0; 
     return result;
     //#undef SK_DEBUG
 }
@@ -481,11 +476,11 @@ void *cmd_fcn(void *img)
         pthread_mutex_lock(&net_img_lock);
         // cout << "Img: " << jpg->metadata->size << " bytes, metadata: " << sizeof(net_meta) << " bytes" << endl;
         int sz = 0;
-        int32_t out_sz = jpg->metadata->size + sizeof(net_meta) + 18;        // total size = size of metadata + size of image + FBEGIN + FEND
-        unsigned char *buf = (unsigned char *)malloc(out_sz);                // image size + image data area
+        int32_t out_sz = jpg->metadata->size + sizeof(net_meta) + 18; // total size = size of metadata + size of image + FBEGIN + FEND
+        unsigned char *buf = (unsigned char *)malloc(out_sz);         // image size + image data area
         memcpy(buf, "SIZE", 4);
         memcpy(buf + 4, &out_sz, 4);
-        memcpy(buf + 8, "FBEGIN", 6);                                            // copy FBEGIN
+        memcpy(buf + 8, "FBEGIN", 6);                                         // copy FBEGIN
         memcpy(buf + 14, jpg->metadata, sizeof(net_meta));                    // copy metadata
         memcpy(buf + 14 + sizeof(net_meta), jpg->data, jpg->metadata->size);  // copy jpeg data
         memcpy(buf + 14 + sizeof(net_meta) + jpg->metadata->size, "FEND", 4); // copy FEND
@@ -664,6 +659,9 @@ int main(int argc, char *argv[])
              << flush;
         ext_img->metadata->width = width;
         cout << "Width: " << ext_img->metadata->width << endl
+             << flush;
+        ext_img->metadata->exposure = exposure;
+        cout << "Exposure: " << ext_img->metadata->exposure << endl
              << flush;
         ext_img->metadata->size = img.copy_image(ext_img->data);
         cout << "Size: " << ext_img->metadata->size << endl

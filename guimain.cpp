@@ -8,8 +8,10 @@
 // See imgui_impl_glfw.cpp for details.
 
 #include <stdio.h>
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
@@ -44,17 +46,49 @@ static void glfw_error_callback(int error, const char *description)
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
+void InitTexture(GLuint &image_texture)
+{
+    glGenTextures(1, &image_texture);
+    glBindTexture(GL_TEXTURE_2D, image_texture);
+
+    // Setup filtering parameters for display
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    return;
+}
+
+void AssignTexture(GLuint &image_texture, unsigned char *data, unsigned image_width, unsigned image_height)
+{
+    glBindTexture(GL_TEXTURE_2D, image_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    return;
+}
+
 #include <jpeglib.h>
+
+pthread_mutex_t texture_lock;
 
 GLuint my_image_texture;
 int my_image_width, my_image_height;
 
-bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_texture, int *out_width, int *out_height)
+typedef struct
 {
+    unsigned char *data;
+    unsigned max_size;
+    unsigned width;
+    unsigned height;
+} imagedata;
+
+bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, imagedata *image)
+{
+    if (len <= 0 || in_jpeg == NULL || image->data == NULL || image->max_size == 0)
+    {
+        return false;
+    }
     // Load from file
     int image_width = 0;
     int image_height = 0;
-    unsigned char *image_data;
+    unsigned char *image_data = image->data;
 
     struct jpeg_decompress_struct cinfo;
     struct jpeg_error_mgr jerr;
@@ -67,26 +101,20 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
    * VERY IMPORTANT: use "b" option to fopen() if you are on a machine that
    * requires it in order to read binary files.
    */
-
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     cinfo.err = jpeg_std_error(&jerr);
     /* Step 1: allocate and initialize JPEG decompression object */
     jpeg_create_decompress(&cinfo);
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
-
     /* Step 2: specify data source (eg, a file) */
 
     jpeg_mem_src(&cinfo, in_jpeg, len);
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     /* Step 3: read file parameters with jpeg_read_header() */
 
-    fprintf(stderr, "%s: %d %d\n", __func__, __LINE__, jpeg_read_header(&cinfo, TRUE));
+    jpeg_read_header(&cinfo, TRUE);
     /* We can ignore the return value from jpeg_read_header since
    *   (a) suspension is not possible with the stdio data source, and
    *   (b) we passed TRUE to reject a tables-only JPEG file as an error.
    * See libjpeg.txt for more info.
    */
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     /* Step 4: set parameters for decompression */
 
     /* In this example, we don't need to change any of the defaults set by
@@ -94,11 +122,10 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
    */
 
     /* Step 5: Start decompressor */
-    cinfo.out_color_space = JCS_EXT_RGBX;
-    cinfo.scale_num = 640; // scale to 480p
-    cinfo.scale_denom = cinfo.image_width;
+    cinfo.out_color_space = JCS_EXT_RGBA;
+    // cinfo.scale_num = 640; // scale to 480p
+    // cinfo.scale_denom = cinfo.image_width;
     (void)jpeg_start_decompress(&cinfo);
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     /* We may need to do some setup of our own at this point before reading
    * the data.  After jpeg_start_decompress() we have the correct scaled
    * output image dimensions available, as well as the output colormap
@@ -116,11 +143,14 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
     /* Here we use the library's state variable cinfo.output_scanline as the
    * loop counter, so that we don't have to keep track ourselves.
    */
-    image_data = (unsigned char *)malloc(row_stride * cinfo.output_height);
+    int loc = 0;
+    if (image->max_size < row_stride * cinfo.output_height)
+    {
+        printf("%s: Required memory for raw image: %u, allocated: %u\n", __func__, row_stride * cinfo.output_height, image->max_size);
+        goto jpeg_end;
+    }
     image_height = cinfo.output_height;
     image_width = cinfo.output_width;
-    int loc = 0;
-    fprintf(stderr, "%s: %d: Width = %d, Height = %d Size = %d\n", __func__, __LINE__, cinfo.output_width, cinfo.output_height, row_stride * cinfo.output_height);
     while (cinfo.output_scanline < cinfo.output_height)
     {
         /* jpeg_read_scanlines expects an array of pointers to scanlines.
@@ -134,9 +164,8 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
     }
 
     /* Step 7: Finish decompression */
-
+jpeg_end:
     (void)jpeg_finish_decompress(&cinfo);
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     /* We can ignore the return value since suspension is not possible
    * with the stdio data source.
    */
@@ -145,35 +174,14 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
 
     /* This is an important step since it will release a good deal of memory. */
     jpeg_destroy_decompress(&cinfo);
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     /* After finish_decompress, we can close the input file.
    * Here we postpone it until after no more JPEG errors are possible,
    * so as to simplify the setjmp error logic above.  (Actually, I don't
    * think that jpeg_destroy can do an error exit, but why assume anything...)
    */
-    if (image_data == NULL)
-        return false;
 
-    // Create a OpenGL texture identifier
-    GLuint image_texture;
-    glGenTextures(1, &image_texture);
-    glBindTexture(GL_TEXTURE_2D, image_texture);
-
-    // Setup filtering parameters for display
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    // Upload pixels into texture
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image_data);
-    fprintf(stderr, "%s: %d %d\n", __func__, __LINE__, image_texture);
-    free(image_data);
-    *out_texture = image_texture;
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
-    *out_width = image_width;
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
-    *out_height = image_height;
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
+    image->height = image_height;
+    image->width = image_width;
     return true;
 }
 
@@ -184,6 +192,7 @@ typedef struct __attribute__((packed))
     unsigned width;
     unsigned height;
     float temp;
+    float exposure;
     uint64_t tstamp;
     int size;
 } net_meta;
@@ -236,7 +245,6 @@ char *find_match(char *buf1, ssize_t len1, char *buf2, ssize_t len2)
 }
 
 pthread_mutex_t lock;
-
 void *rcv_thr(void *sock)
 {
     img.metadata = (net_meta *)malloc(sizeof(net_meta));
@@ -245,8 +253,6 @@ void *rcv_thr(void *sock)
     while (!done)
     {
         memset(rcv_buf, 0x0, sizeof(rcv_buf));
-        memset(img.metadata, 0x0, sizeof(net_meta));
-        memset(img.data, 0x0, 1024 * 1024 * 4);
         usleep(1000 * 1000 / 30); // receive at 120 Hz
         if (conn_rdy)
         {
@@ -294,13 +300,11 @@ void *rcv_thr(void *sock)
                     fprintf(stderr, "Width: %u\n", img.metadata->width);
                     fprintf(stderr, "Hidth: %u\n", img.metadata->height);
                     fprintf(stderr, "Temp: %f\n", img.metadata->temp);
+                    fprintf(stderr, "Exposure: %f s\n", img.metadata->exposure);
                     fprintf(stderr, "JPEG Size: %d\n", img.metadata->size);
                     if (img.metadata->size > 0)
                     {
                         memcpy(img.data, head + 6 + sizeof(net_meta), img.metadata->size);
-                        unsigned char jpegdata[img.metadata->size];
-                        memcpy(jpegdata, head + 6 + sizeof(net_meta), img.metadata->size);
-                        LoadTextureFromMem(jpegdata, img.metadata->size, &my_image_texture, &my_image_width, &my_image_height);
                     }
                     pthread_mutex_unlock(&lock);
                     if (head + 6 + sizeof(net_meta) + img.metadata->size != tail)
@@ -338,7 +342,6 @@ int main(int, char **)
         return 1;
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1); // Enable vsync
-
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -398,15 +401,7 @@ int main(int, char **)
         goto end;
     }
     // Create a OpenGL texture identifier
-    glGenTextures(1, &my_image_texture);
-    glBindTexture(GL_TEXTURE_2D, my_image_texture);
-
-    // Setup filtering parameters for display
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    // Upload pixels into texture
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    InitTexture(my_image_texture);
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
@@ -443,8 +438,11 @@ int main(int, char **)
                     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
                     {
                         printf("\n Socket creation error \n");
-                        return -1;
+                        fflush(stdout);
+                        // return -1;
                     }
+                    // else
+                    //     fcntl(sock, F_SETFL, O_NONBLOCK); // set the socket non-blocking on macOS
                     if (inet_pton(AF_INET, ipaddr, &serv_addr.sin_addr) <= 0)
                     {
                         printf("\nInvalid address/ Address not supported \n");
@@ -454,7 +452,9 @@ int main(int, char **)
                         printf("\nConnection Failed \n");
                     }
                     else
+                    {
                         conn_rdy = true;
+                    }
                 }
             }
             else
@@ -478,28 +478,27 @@ int main(int, char **)
             }
             if (conn_rdy && sock > 0)
             {
-                // pthread_mutex_lock(&lock);
-                // if (img.metadata->size > 0)
-                // {
-                //     // char fname[256];
-                //     // static int ctr = 0;
-                //     // snprintf(fname, 256, "imgdata/img%d.jpg", ctr++);
-                //     // unlink(fname);
-                //     // FILE *fp = fopen(fname, "wb");
-                //     // if (fp != NULL)
-                //     // {
-                //     //     fwrite(img.data, 1, img.metadata->size, fp);
-                //     //     fclose(fp);
-                //     // }
-                //     LoadTextureFromMem(img.data, img.metadata->size, &my_image_texture, &my_image_width, &my_image_height);
-                // }
-                // pthread_mutex_unlock(&lock);
-                // if (my_image_texture != NULL)
-                // {
-                ImGui::Text("pointer = %p", my_image_texture);
-                ImGui::Text("size = %d x %d", my_image_width, my_image_height);
-                ImGui::Image((void *)(intptr_t)my_image_texture, ImVec2(my_image_width, my_image_height));
-                // }
+                pthread_mutex_lock(&texture_lock);
+                struct timeval tstamp;
+                tstamp.tv_sec = img.metadata->tstamp / (uint64_t)1000000;
+                tstamp.tv_usec = (img.metadata->tstamp % 1000000);
+                struct tm ts;
+                char buf[80];
+
+                // Format time, "ddd yyyy-mm-dd hh:mm:ss zzz"
+                ts = *localtime(&tstamp.tv_sec);
+                strftime(buf, sizeof(buf), "%a %Y-%m-%d %H:%M:%S %Z", &ts);
+                ImGui::Text(u8"Timestamp: %s | Exposure: %.3f s | CCD Temp: %.2f °C", buf, img.metadata->exposure, img.metadata->temp);
+                imagedata live_image;
+                live_image.max_size = 1024*1024*4*2;
+                live_image.data = (unsigned char *)malloc(live_image.max_size);
+                LoadTextureFromMem(img.data, (img.metadata->size), &live_image);
+                float w = ImGui::GetContentRegionAvailWidth();
+                float h = w * (live_image.height * 1.0 / live_image.width);
+                AssignTexture(my_image_texture, live_image.data, live_image.width, live_image.height);
+                free(live_image.data);
+                ImGui::Image((void *)(intptr_t)my_image_texture, ImVec2(w, h));
+                pthread_mutex_unlock(&texture_lock);
             }
             ImGui::End();
         }
