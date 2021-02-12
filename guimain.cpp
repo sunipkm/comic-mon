@@ -99,7 +99,9 @@ typedef struct
 bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, imagedata *image)
 {
     if (len <= 0 || in_jpeg == NULL)
+    {
         return false;
+    }
     // Load from file
     int image_width = 0;
     int image_height = 0;
@@ -116,26 +118,20 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, imagedata *im
    * VERY IMPORTANT: use "b" option to fopen() if you are on a machine that
    * requires it in order to read binary files.
    */
-
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     cinfo.err = jpeg_std_error(&jerr);
     /* Step 1: allocate and initialize JPEG decompression object */
     jpeg_create_decompress(&cinfo);
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
-
     /* Step 2: specify data source (eg, a file) */
 
     jpeg_mem_src(&cinfo, in_jpeg, len);
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     /* Step 3: read file parameters with jpeg_read_header() */
 
-    fprintf(stderr, "%s: %d %d\n", __func__, __LINE__, jpeg_read_header(&cinfo, TRUE));
+    jpeg_read_header(&cinfo, TRUE);
     /* We can ignore the return value from jpeg_read_header since
    *   (a) suspension is not possible with the stdio data source, and
    *   (b) we passed TRUE to reject a tables-only JPEG file as an error.
    * See libjpeg.txt for more info.
    */
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     /* Step 4: set parameters for decompression */
 
     /* In this example, we don't need to change any of the defaults set by
@@ -144,10 +140,9 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, imagedata *im
 
     /* Step 5: Start decompressor */
     cinfo.out_color_space = JCS_EXT_RGBA;
-    cinfo.scale_num = 640; // scale to 480p
-    cinfo.scale_denom = cinfo.image_width;
+    // cinfo.scale_num = 640; // scale to 480p
+    // cinfo.scale_denom = cinfo.image_width;
     (void)jpeg_start_decompress(&cinfo);
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     /* We may need to do some setup of our own at this point before reading
    * the data.  After jpeg_start_decompress() we have the correct scaled
    * output image dimensions available, as well as the output colormap
@@ -169,7 +164,6 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, imagedata *im
     image_height = cinfo.output_height;
     image_width = cinfo.output_width;
     int loc = 0;
-    fprintf(stderr, "%s: %d: Width = %d, Height = %d Size = %d\n", __func__, __LINE__, cinfo.output_width, cinfo.output_height, row_stride * cinfo.output_height);
     while (cinfo.output_scanline < cinfo.output_height)
     {
         /* jpeg_read_scanlines expects an array of pointers to scanlines.
@@ -185,7 +179,6 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, imagedata *im
     /* Step 7: Finish decompression */
 
     (void)jpeg_finish_decompress(&cinfo);
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     /* We can ignore the return value since suspension is not possible
    * with the stdio data source.
    */
@@ -194,7 +187,6 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, imagedata *im
 
     /* This is an important step since it will release a good deal of memory. */
     jpeg_destroy_decompress(&cinfo);
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
     /* After finish_decompress, we can close the input file.
    * Here we postpone it until after no more JPEG errors are possible,
    * so as to simplify the setjmp error logic above.  (Actually, I don't
@@ -276,8 +268,6 @@ void *rcv_thr(void *sock)
     while (!done)
     {
         memset(rcv_buf, 0x0, sizeof(rcv_buf));
-        memset(img.metadata, 0x0, sizeof(net_meta));
-        memset(img.data, 0x0, 1024 * 1024 * 4);
         usleep(1000 * 1000 / 30); // receive at 120 Hz
         if (conn_rdy)
         {
@@ -329,17 +319,6 @@ void *rcv_thr(void *sock)
                     if (img.metadata->size > 0)
                     {
                         memcpy(img.data, head + 6 + sizeof(net_meta), img.metadata->size);
-                        memcpy(jpegdata, head + 6 + sizeof(net_meta), img.metadata->size);
-                        char fname[256];
-                        static int imgnum = 0;
-                        snprintf(fname, 256, "imgdata/img%d.jpg", imgnum++);
-                        unlink(fname);
-                        FILE *fp = fopen(fname, "wb");
-                        if (fp != NULL)
-                        {
-                            fwrite(jpegdata, 1, img.metadata->size, fp);
-                            fclose(fp);
-                        }
                     }
                     pthread_mutex_unlock(&lock);
                     if (head + 6 + sizeof(net_meta) + img.metadata->size != tail)
@@ -553,13 +532,22 @@ int main(int, char **)
             if (conn_rdy && sock > 0)
             {
                 pthread_mutex_lock(&texture_lock);
+                struct timespec tstamp;
+                tstamp.tv_sec = img.metadata->tstamp/(uint64_t) 1000000;
+                tstamp.tv_nsec = (img.metadata->tstamp % 1000000) * 1000;
+                struct tm ts;
+                char buf[80];
+
+                // Format time, "ddd yyyy-mm-dd hh:mm:ss zzz"
+                ts = *localtime(&tstamp.tv_sec);
+                strftime(buf, sizeof(buf), "%a %Y-%m-%d %H:%M:%S %Z", &ts);
+                ImGui::Text("Timestamp: %s", buf);
                 imagedata live_image;
-                // if (img.metadata->size > 0)
-                LoadTextureFromMem(img.data, img.metadata->size, &live_image);
+                LoadTextureFromMem(img.data, (img.metadata->size), &live_image);
+                float w = ImGui::GetContentRegionAvailWidth();
+                float h = w * (live_image.height * 1.0 / live_image.width);
                 AssignTexture(my_image_texture, live_image.data, live_image.width, live_image.height);
-                ImGui::Text("pointer = %p", my_image_texture);
-                ImGui::Text("size = %d x %d", live_image.width, live_image.height);
-                ImGui::Image((void *)(intptr_t)my_image_texture, ImVec2(live_image.width, live_image.height));
+                ImGui::Image((void *)(intptr_t)my_image_texture, ImVec2(w, h));
                 pthread_mutex_unlock(&texture_lock);
             }
             ImGui::End();

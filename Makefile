@@ -57,6 +57,11 @@ all: $(GUITARGET) $(TESTJPEG) $(CTARGET) imgui/libimgui_glfw.a
 	$(CXX) $(CXXFLAGS) -o testjpeg.out $(TESTJPEG) imgui/libimgui_glfw.a $(LIBS)
 	$(ECHO) "Built for $(UNAME_S), execute ./$(GUITARGET)"
 
+comic:
+	$(CXX) -o comicmon.out atikserver.cpp -O2 -latikccd -lusb-1.0 -ljpeg -lm -lpthread -lcfitsio
+	sudo pigpiod
+	sudo ./startcam.py
+
 $(GUITARGET): $(CPPOBJS) imgui/libimgui_glfw.a
 	$(CXX) $(CXXFLAGS) -o $@ $(CPPOBJS) imgui/libimgui_glfw.a $(LIBS)
 
