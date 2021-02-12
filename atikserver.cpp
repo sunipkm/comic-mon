@@ -136,6 +136,7 @@ typedef struct
     unsigned width;
     unsigned height;
     float temp;
+    float exposure;
     unsigned long long tstamp;
 } comic_image;
 
@@ -218,6 +219,7 @@ typedef struct __attribute__((packed))
     unsigned width;
     unsigned height;
     float temp;
+    float exposure;
     uint64_t tstamp;
     int size;
 } net_meta;
@@ -473,11 +475,11 @@ void *cmd_fcn(void *img)
         pthread_mutex_lock(&net_img_lock);
         // cout << "Img: " << jpg->metadata->size << " bytes, metadata: " << sizeof(net_meta) << " bytes" << endl;
         int sz = 0;
-        int32_t out_sz = jpg->metadata->size + sizeof(net_meta) + 18;        // total size = size of metadata + size of image + FBEGIN + FEND
-        unsigned char *buf = (unsigned char *)malloc(out_sz);                // image size + image data area
+        int32_t out_sz = jpg->metadata->size + sizeof(net_meta) + 18; // total size = size of metadata + size of image + FBEGIN + FEND
+        unsigned char *buf = (unsigned char *)malloc(out_sz);         // image size + image data area
         memcpy(buf, "SIZE", 4);
         memcpy(buf + 4, &out_sz, 4);
-        memcpy(buf + 8, "FBEGIN", 6);                                            // copy FBEGIN
+        memcpy(buf + 8, "FBEGIN", 6);                                         // copy FBEGIN
         memcpy(buf + 14, jpg->metadata, sizeof(net_meta));                    // copy metadata
         memcpy(buf + 14 + sizeof(net_meta), jpg->data, jpg->metadata->size);  // copy jpeg data
         memcpy(buf + 14 + sizeof(net_meta) + jpg->metadata->size, "FEND", 4); // copy FEND
@@ -656,6 +658,9 @@ int main(int argc, char *argv[])
              << flush;
         ext_img->metadata->width = width;
         cout << "Width: " << ext_img->metadata->width << endl
+             << flush;
+        ext_img->metadata->exposure = exposure;
+        cout << "Exposure: " << ext_img->metadata->exposure << endl
              << flush;
         ext_img->metadata->size = img.copy_image(ext_img->data);
         cout << "Size: " << ext_img->metadata->size << endl

@@ -208,6 +208,7 @@ typedef struct __attribute__((packed))
     unsigned width;
     unsigned height;
     float temp;
+    float exposure;
     uint64_t tstamp;
     int size;
 } net_meta;
@@ -315,6 +316,7 @@ void *rcv_thr(void *sock)
                     fprintf(stderr, "Width: %u\n", img.metadata->width);
                     fprintf(stderr, "Hidth: %u\n", img.metadata->height);
                     fprintf(stderr, "Temp: %f\n", img.metadata->temp);
+                    fprintf(stderr, "Exposure: %f s\n", img.metadata->exposure);
                     fprintf(stderr, "JPEG Size: %d\n", img.metadata->size);
                     if (img.metadata->size > 0)
                     {
