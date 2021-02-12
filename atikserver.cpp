@@ -362,7 +362,8 @@ double find_optimum_exposure(unsigned short *picdata, unsigned int imgsize, doub
 
     if (result > MAX_ALLOWED_EXPOSURE)
         result = MAX_ALLOWED_EXPOSURE;
-
+    // round to 1 ms
+    result = ((int)(result * 1000))/1000.0; 
     return result;
     //#undef SK_DEBUG
 }
