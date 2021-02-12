@@ -268,12 +268,10 @@ char *find_match(char *buf1, ssize_t len1, char *buf2, ssize_t len2)
 }
 
 pthread_mutex_t lock;
-unsigned char *jpegdata;
 void *rcv_thr(void *sock)
 {
     img.metadata = (net_meta *)malloc(sizeof(net_meta));
     img.data = (unsigned char *)malloc(1024 * 1024 * 4);
-    jpegdata = (unsigned char *)malloc(1024 * 1024 * 4);
     memset(rcv_buf, 0x0, sizeof(rcv_buf));
     while (!done)
     {
@@ -354,7 +352,6 @@ void *rcv_thr(void *sock)
     }
     free(img.metadata);
     free(img.data);
-    free(jpegdata);
     return NULL;
 }
 
