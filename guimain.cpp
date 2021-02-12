@@ -64,6 +64,24 @@ static void glfw_error_callback(int error, const char *description)
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
+void InitTexture(GLuint &image_texture)
+{
+    glGenTextures(1, &image_texture);
+    glBindTexture(GL_TEXTURE_2D, image_texture);
+
+    // Setup filtering parameters for display
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    return;
+}
+
+void AssignTexture(GLuint &image_texture, unsigned char *data, unsigned image_width, unsigned image_height)
+{
+    glBindTexture(GL_TEXTURE_2D, image_texture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    return;
+}
+
 #include <jpeglib.h>
 
 pthread_mutex_t texture_lock;
@@ -71,7 +89,14 @@ pthread_mutex_t texture_lock;
 GLuint my_image_texture;
 int my_image_width, my_image_height;
 
-bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_texture, int *out_width, int *out_height)
+typedef struct
+{
+    unsigned char *data;
+    unsigned width;
+    unsigned height;
+} imagedata;
+
+bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, imagedata *image)
 {
     // Load from file
     int image_width = 0;
@@ -116,7 +141,7 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
    */
 
     /* Step 5: Start decompressor */
-    cinfo.out_color_space = JCS_GRAYSCALE;
+    cinfo.out_color_space = JCS_EXT_RGBA;
     cinfo.scale_num = 640; // scale to 480p
     cinfo.scale_denom = cinfo.image_width;
     (void)jpeg_start_decompress(&cinfo);
@@ -176,28 +201,9 @@ bool LoadTextureFromMem(const unsigned char *in_jpeg, ssize_t len, GLuint *out_t
     if (image_data == NULL)
         return false;
 
-    // Create a OpenGL texture identifier
-    GLuint image_texture;
-    glGenTextures(1, &image_texture);
-    glBindTexture(GL_TEXTURE_2D, image_texture);
-
-    // Setup filtering parameters for display
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    // Upload pixels into texture
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, image_width, image_height, 0, GL_RED, GL_UNSIGNED_BYTE, image_data);
-    fprintf(stderr, "%s: %d %d\n", __func__, __LINE__, image_texture);
-    free(image_data);
-    pthread_mutex_lock(&texture_lock);
-    *out_texture = image_texture;
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
-    *out_width = image_width;
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
-    *out_height = image_height;
-    pthread_mutex_unlock(&texture_lock);
-    fprintf(stderr, "%s: %d\n", __func__, __LINE__);
+    image->data = image_data;
+    image->height = image_height;
+    image->width = image_width;
     return true;
 }
 
@@ -322,9 +328,6 @@ void *rcv_thr(void *sock)
                     if (img.metadata->size > 0)
                     {
                         memcpy(img.data, head + 6 + sizeof(net_meta), img.metadata->size);
-                        unsigned char jpegdata[img.metadata->size];
-                        memcpy(jpegdata, head + 6 + sizeof(net_meta), img.metadata->size);
-                        LoadTextureFromMem(jpegdata, img.metadata->size, &my_image_texture, &my_image_width, &my_image_height);
                     }
                     pthread_mutex_unlock(&lock);
                     if (head + 6 + sizeof(net_meta) + img.metadata->size != tail)
@@ -460,15 +463,7 @@ int main(int, char **)
         goto end;
     }
     // Create a OpenGL texture identifier
-    glGenTextures(1, &my_image_texture);
-    glBindTexture(GL_TEXTURE_2D, my_image_texture);
-
-    // Setup filtering parameters for display
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    // Upload pixels into texture
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    InitTexture(my_image_texture);
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
@@ -508,8 +503,8 @@ int main(int, char **)
                         fflush(stdout);
                         // return -1;
                     }
-                    else
-                        fcntl(sock, F_SETFL, O_NONBLOCK); // set the socket non-blocking on macOS
+                    // else
+                    //     fcntl(sock, F_SETFL, O_NONBLOCK); // set the socket non-blocking on macOS
                     if (inet_pton(AF_INET, ipaddr, &serv_addr.sin_addr) <= 0)
                     {
                         printf("\nInvalid address/ Address not supported \n");
@@ -545,30 +540,14 @@ int main(int, char **)
             }
             if (conn_rdy && sock > 0)
             {
-                // pthread_mutex_lock(&lock);
-                // if (img.metadata->size > 0)
-                // {
-                //     // char fname[256];
-                //     // static int ctr = 0;
-                //     // snprintf(fname, 256, "imgdata/img%d.jpg", ctr++);
-                //     // unlink(fname);
-                //     // FILE *fp = fopen(fname, "wb");
-                //     // if (fp != NULL)
-                //     // {
-                //     //     fwrite(img.data, 1, img.metadata->size, fp);
-                //     //     fclose(fp);
-                //     // }
-                //     LoadTextureFromMem(img.data, img.metadata->size, &my_image_texture, &my_image_width, &my_image_height);
-                // }
-                // pthread_mutex_unlock(&lock);
-                // if (my_image_texture != NULL)
-                // {
                 pthread_mutex_lock(&texture_lock);
+                imagedata live_image;
+                LoadTextureFromMem(img.data, img.metadata->size, &live_image);
+                AssignTexture(my_image_texture, live_image.data, live_image.width, live_image.height);
                 ImGui::Text("pointer = %p", my_image_texture);
-                ImGui::Text("size = %d x %d", my_image_width, my_image_height);
-                ImGui::Image((void *)(intptr_t)my_image_texture, ImVec2(my_image_width, my_image_height));
+                ImGui::Text("size = %d x %d", live_image.width, live_image.height);
+                ImGui::Image((void *)(intptr_t)my_image_texture, ImVec2(live_image.width, live_image.height));
                 pthread_mutex_unlock(&texture_lock);
-                // }
             }
             ImGui::End();
         }
