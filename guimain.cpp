@@ -17,6 +17,96 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <signal.h>
+#include <errno.h>
+
+int connect_w_tout(int soc, const struct sockaddr *addr, socklen_t sock_sz, int tout_s)
+{
+    int res;
+    long arg;
+    fd_set myset;
+    struct timeval tv;
+    int valopt;
+    socklen_t lon;
+
+    // Set non-blocking
+    if ((arg = fcntl(soc, F_GETFL, NULL)) < 0)
+    {
+        fprintf(stderr, "Error fcntl(..., F_GETFL) (%s)\n", strerror(errno));
+        return -1;
+    }
+    arg |= O_NONBLOCK;
+    if (fcntl(soc, F_SETFL, arg) < 0)
+    {
+        fprintf(stderr, "Error fcntl(..., F_SETFL) (%s)\n", strerror(errno));
+        return -1;
+    }
+    // Trying to connect with timeout
+    res = connect(soc, addr, sock_sz);
+    if (res < 0)
+    {
+        if (errno == EINPROGRESS)
+        {
+            fprintf(stderr, "EINPROGRESS in connect() - selecting\n");
+            do
+            {
+                if (tout_s > 0)
+                    tv.tv_sec = tout_s;
+                else
+                    tv.tv_sec = 1; // minimum 1 s
+                tv.tv_usec = 0;
+                FD_ZERO(&myset);
+                FD_SET(soc, &myset);
+                res = select(soc + 1, NULL, &myset, NULL, &tv);
+                if (res < 0 && errno != EINTR)
+                {
+                    fprintf(stderr, "Error connecting %d - %s\n", errno, strerror(errno));
+                    return -1;
+                }
+                else if (res > 0)
+                {
+                    // Socket selected for write
+                    lon = sizeof(int);
+                    if (getsockopt(soc, SOL_SOCKET, SO_ERROR, (void *)(&valopt), &lon) < 0)
+                    {
+                        fprintf(stderr, "Error in getsockopt() %d - %s\n", errno, strerror(errno));
+                        return -1;
+                    }
+                    // Check the value returned...
+                    if (valopt)
+                    {
+                        fprintf(stderr, "Error in delayed connection() %d - %s\n", valopt, strerror(valopt));
+                        return -1;
+                    }
+                    break;
+                }
+                else
+                {
+                    fprintf(stderr, "Timeout in select() - Cancelling!\n");
+                    return -1;
+                }
+            } while (1);
+        }
+        else
+        {
+            fprintf(stderr, "Error connecting %d - %s\n", errno, strerror(errno));
+            return -1;
+        }
+    }
+    // Set to blocking mode again...
+    if ((arg = fcntl(soc, F_GETFL, NULL)) < 0)
+    {
+        fprintf(stderr, "Error fcntl(..., F_GETFL) (%s)\n", strerror(errno));
+        return -1;
+    }
+    arg &= (~O_NONBLOCK);
+    if (fcntl(soc, F_SETFL, arg) < 0)
+    {
+        fprintf(stderr, "Error fcntl(..., F_SETFL) (%s)\n", strerror(errno));
+        return -1;
+    }
+    // I hope that is all
+    return soc;
+}
 
 volatile sig_atomic_t done = 0;
 
@@ -447,7 +537,8 @@ int main(int, char **)
                     {
                         printf("\nInvalid address/ Address not supported \n");
                     }
-                    if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+                    // if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+                    if (connect_w_tout(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr), 1) < 0)
                     {
                         printf("\nConnection Failed \n");
                     }
