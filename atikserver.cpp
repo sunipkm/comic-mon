@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <math.h>
+#include <gpiodev/gpiodev.h>
 
 #include <iostream>
 #include <fitsio.h>
@@ -705,7 +706,8 @@ public:
 int main(int argc, char *argv[])
 {
     signal(SIGINT, sig_handler);
-
+    gpioSetMode(11, GPIO_OUT);
+    gpioWrite(11, GPIO_HIGH);
     Atik414ex *device = new Atik414ex();
     double exposure;
     bool success;
@@ -846,5 +848,6 @@ int main(int argc, char *argv[])
 end:
     free(ext_img->metadata);
     free(ext_img);
+    gpioWrite(11, GPIO_LOW);
     return 0;
 }

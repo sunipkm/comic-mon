@@ -2,3 +2,6 @@
 	path = imgui
 	url = git@github.com:sunipkmukherjee/imgui.git
 	branch = docking
+[submodule "gpiodev"]
+	path = gpiodev
+	url = git@github.com:SPACE-HAUC/gpiodev.git
