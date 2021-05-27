@@ -51,9 +51,8 @@ CPPOBJS=guimain.o
 
 TESTJPEG=jpegtest.o
 
-all: $(GUITARGET) $(TESTJPEG) atikserver imgui/libimgui_glfw.a
+all: $(GUITARGET) $(TESTJPEG) imgui/libimgui_glfw.a
 	$(CXX) $(CXXFLAGS) -o testjpeg.out $(TESTJPEG) imgui/libimgui_glfw.a $(LIBS)
-	$(CXX) $(ATIKCXXFLAGS) -o atikserver.out atikserver.o $(ATIKLDFLAGS) 
 	$(ECHO) "Built for $(UNAME_S), execute ./$(GUITARGET)"
 
 atikserver: atikserver.o gpiodev/gpiodev.o

@@ -34,7 +34,11 @@ extern "C"
 #define SO_REUSEPORT 15
 #endif
 
-#define eprintf(...) fprintf(stderr, __VA_ARGS__);
+#define eprintf(str, ...) \
+{ \
+    fprintf(stderr, "%s, %d: " str "\n", __func__, __LINE__,  ##__VA_ARGS__); \
+    fflush(stderr); \
+}
 
 using namespace std;
 
@@ -544,6 +548,7 @@ public:
         int count = AtikCamera::list(devices, 1);
         if (count < 1)
             return false;
+        eprintf("Device count: %d", count);
         device = devices[0];
         devopen = device->open();
         return devopen;
@@ -708,6 +713,7 @@ int main(int argc, char *argv[])
     signal(SIGINT, sig_handler);
     gpioSetMode(11, GPIO_OUT);
     gpioWrite(11, GPIO_HIGH);
+    sleep(1);
     Atik414ex *device = new Atik414ex();
     double exposure;
     bool success;
