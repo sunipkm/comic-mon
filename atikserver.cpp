@@ -550,9 +550,6 @@ private:
         bool success = false;
         if (img->data != NULL)
             success = device->getImage((unsigned short *)img->data, img->width * img->height);
-        else
-            eprintf("Image data is null");
-        eprintf("Success: %d", success);
         return success;
     }
 
@@ -617,7 +614,6 @@ public:
         img->height = height;
         img->width = width;
         img->tstamp = tnow->usec();
-        eprintf("Starting exposure");
         if (exposure > maxShortExp)
         {
             success = device->startExposure(false);
@@ -631,14 +627,14 @@ public:
         }
         else
             success = device->readCCD(ofX, ofY, sX, sY, bin, bin, exposure);
-        // get temperature
-        img->temp = getTemp();
         // set imgprop properties
         if (success)
         {
             if (getPicture())
                 prop = img;
         }
+        // get temperature
+        img->temp = getTemp(); // get temperature AFTER exposure
         return prop;
     }
 
@@ -784,7 +780,7 @@ int main(int argc, char *argv[])
         cout << "Size: " << ext_img->metadata->size << endl;
         pthread_mutex_unlock(&net_img_lock);
         if (!done)
-            exposure = find_optimum_exposure(tmp, props->width * props->height, exposure);
+            exposure = find_optimum_exposure(props->data, props->width * props->height, exposure);
         if (exposure < device->minShortExp)
             exposure = device->minShortExp;
         if (exposure > MAX_ALLOWED_EXPOSURE)
