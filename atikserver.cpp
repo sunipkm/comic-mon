@@ -789,7 +789,7 @@ int main(int argc, char *argv[])
     cout << "main: Out of loop" << endl
          << flush;
     done = 1;
-    rc = pthread_join(cmd_thread, NULL);
+    rc = pthread_cancel(cmd_thread);
 end:
     free(ext_img->metadata);
     free(ext_img);
