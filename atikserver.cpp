@@ -363,7 +363,7 @@ double find_optimum_exposure(unsigned short *picdata, unsigned int imgsize, doub
     if (result > MAX_ALLOWED_EXPOSURE)
         result = MAX_ALLOWED_EXPOSURE;
     // round to 1 ms
-    result = ((int)(result * 1000))/1000.0; 
+    result = ((int)(result * 1000)) / 1000.0;
     return result;
     //#undef SK_DEBUG
 }
@@ -517,60 +517,249 @@ void *cmd_fcn(void *img)
     return NULL;
 }
 
+typedef struct
+{
+    unsigned width;
+    unsigned height;
+} AtikImageProps;
+class Atik414ex
+{
+private:
+    AtikCamera *devices[1];
+    AtikCamera *device;
+    AtikCapabilities devcap[1];
+    bool devopen;
+    unsigned tscount, maxBinX, maxBinY;
+    bool longExpMode;
+    AtikImageProps imgprop[1];
+    double exposure;
+
+public:
+    unsigned pixelCX, pixelCY, maxBin;
+    int offsetX, offsetY;
+    double minShortExp, maxShortExp;
+    bool open()
+    {
+        int count = AtikCamera::list(devices, 1);
+        if (count < 1)
+            return false;
+        device = devices[0];
+        devopen = device->open();
+        return devopen;
+    }
+
+    bool getCap()
+    {
+        const char *devname;
+        CAMERA_TYPE type;
+        if (devopen)
+        {
+            if (device->getCapabilities(&devname, &type, devcap))
+            {
+                pixelCX = devcap->pixelCountX;
+                pixelCY = devcap->pixelCountY;
+                maxBinX = devcap->maxBinX;
+                maxBinY = devcap->maxBinY;
+                tscount = devcap->tempSensorCount;
+                offsetX = devcap->offsetX;
+                offsetY = devcap->offsetY;
+                longExpMode = devcap->supportsLongExposure;
+                minShortExp = devcap->minShortExposure;
+                maxShortExp = devcap->maxShortExposure;
+                exposure = maxShortExp; // startup
+                maxBin = maxBinX > maxBinY ? maxBinY : maxBinX;
+            }
+            else
+                return false;
+        }
+    }
+
+    AtikImageProps *snapPicture(unsigned ofX, unsigned ofY, unsigned sX, unsigned sY, unsigned bin, double exposure)
+    {
+        AtikImageProps *prop = NULL; // start with NULL
+        unsigned height = device->imageHeight(sY, bin);
+        unsigned width = device->imageWidth(sX, bin);
+
+        if (bin > maxBin)
+        {
+            return prop; // error
+        }
+        // snap picture
+        bool success = false;
+        if (exposure > maxShortExp)
+        {
+            success = device->startExposure(false);
+            if (!success)
+            {
+                return NULL;
+            }
+            long delay = device->delay(exposure);
+            usleep(delay);
+            success = device->readCCD(ofX, ofY, sX, sY, bin, bin);
+        }
+        else
+            success = device->readCCD(ofX, ofY, sX, sY, bin, bin, exposure);
+
+        // set imgprop properties
+        if (success)
+        {
+            imgprop->width = width;
+            imgprop->height = height;
+            prop = imgprop;
+        }
+        return prop;
+    }
+
+    AtikImageProps *snapPicture(unsigned ofX, unsigned ofY, unsigned sX, unsigned sY, unsigned bin)
+    {
+        return snapPicture(ofX, ofY, sX, sY, bin, exposure);
+    }
+
+    AtikImageProps *snapPicture(unsigned bin, double exposure)
+    {
+        return snapPicture(0, 0, pixelCX, pixelCY, bin, exposure);
+    }
+
+    AtikImageProps *snapPicture(unsigned bin)
+    {
+        return snapPicture(bin, exposure);
+    }
+
+    void setExposure(double exposure)
+    {
+        this->exposure = exposure;
+    }
+
+    double getExposure()
+    {
+        return this->exposure;
+    }
+
+    bool getPicture(void *ptr, size_t len)
+    {
+        // copy image to ptr
+        if (len < imgprop->width * imgprop->height)
+        {
+            return false;
+        }
+        bool success = device->getImage((unsigned short *)ptr, imgprop->width * imgprop->height);
+        return success;
+    }
+
+    float getTemp()
+    {
+        float temp[tscount];
+        if (device->getTemperatureSensorStatus(tscount, temp))
+            return temp[0];
+        return -273.15; // return 0K as error
+    }
+
+    unsigned getMaxSize()
+    {
+        return pixelCX * pixelCY;
+    }
+
+    Atik414ex()
+    {
+        devopen = false;
+        if (open())
+        {
+            if (!getCap())
+            {
+                throw std::runtime_error("Error getting capabilities");
+                goto err;
+            }
+            sleep(1);
+            // get first exposure
+            unsigned tmp[pixelCX * pixelCY];
+            if (snapPicture(1, minShortExp) == NULL)
+            {
+                throw std::runtime_error("Could not initialize first exposure");
+                goto err;
+            }
+            if (!getPicture(tmp, pixelCY * pixelCX))
+            {
+                throw std::runtime_error("Could not get first exposure");
+                goto err;
+            }
+            return;
+        }
+        else
+            throw std::runtime_error("Error opening device");
+    err:
+        devopen = false;
+        device->close();
+        return;
+    }
+    ~Atik414ex()
+    {
+        if (devopen)
+        {
+            device->close();
+            devopen = false;
+        }
+    }
+    
+};
+
 int main(int argc, char *argv[])
 {
     signal(SIGINT, sig_handler);
-    static AtikCamera *devices[1];
-    int count = AtikCamera::list(devices, 1);
-    AtikCamera *device = devices[0];
-    cout << "open " << device->getName() << endl;
 
-    bool success = device->open();
+    Atik414ex *device = new Atik414ex();
+    double exposure;
+    bool success;
+    // static AtikCamera *devices[1];
+    // int count = AtikCamera::list(devices, 1);
+    // AtikCamera *device = devices[0];
+    // cout << "open " << device->getName() << endl;
 
-    if (success)
-        cout << "Opened camera successfully" << endl;
+    // bool success = device->open();
 
-    AtikCapabilities *devcap = new AtikCapabilities;
-    const char *devname;
-    CAMERA_TYPE type;
-    success = device->getCapabilities(&devname, &type, devcap);
+    // if (success)
+    //     cout << "Opened camera successfully" << endl;
 
-    if (!success)
-    {
-        cout << "Could not get capabilites" << endl;
-        return -1;
-    }
+    // AtikCapabilities *devcap = new AtikCapabilities;
+    // const char *devname;
+    // CAMERA_TYPE type;
+    // success = device->getCapabilities(&devname, &type, devcap);
 
-    unsigned pixelCX = devcap->pixelCountX;
-    unsigned pixelCY = devcap->pixelCountY;
+    // if (!success)
+    // {
+    //     cout << "Could not get capabilites" << endl;
+    //     return -1;
+    // }
 
-    unsigned pixelSX = devcap->pixelSizeX;
-    unsigned pixelSY = devcap->pixelSizeY;
+    // unsigned pixelCX = devcap->pixelCountX;
+    // unsigned pixelCY = devcap->pixelCountY;
 
-    unsigned maxBinX = devcap->maxBinX;
-    unsigned maxBinY = devcap->maxBinY;
+    // unsigned pixelSX = devcap->pixelSizeX;
+    // unsigned pixelSY = devcap->pixelSizeY;
 
-    unsigned tempSensorCount = devcap->tempSensorCount;
+    // unsigned maxBinX = devcap->maxBinX;
+    // unsigned maxBinY = devcap->maxBinY;
 
-    int offsetX = devcap->offsetX;
-    int offsetY = devcap->offsetY;
+    // unsigned tempSensorCount = devcap->tempSensorCount;
 
-    bool longExpMode = devcap->supportsLongExposure;
+    // int offsetX = devcap->offsetX;
+    // int offsetY = devcap->offsetY;
 
-    double minShortExp = devcap->minShortExposure;
-    double maxShortExp = devcap->maxShortExposure;
+    // bool longExpMode = devcap->supportsLongExposure;
 
-    double exposure = maxShortExp;
+    // double minShortExp = devcap->minShortExposure;
+    // double maxShortExp = devcap->maxShortExposure;
 
-    unsigned maxPixBin = maxBinX > maxBinY ? maxBinY : maxBinX;
+    // double exposure = maxShortExp;
 
-    cout << "Max Pixel Bin: " << maxPixBin << endl;
+    // unsigned maxPixBin = maxBinX > maxBinY ? maxBinY : maxBinX;
 
-    maxPixBin = 4;
+    // cout << "Max Pixel Bin: " << maxPixBin << endl;
 
-    unsigned short tmp[pixelCX * pixelCY];
+    // maxPixBin = 4;
 
-    success = device->readCCD(0, 0, pixelCX, pixelCY, 1, 1, 0.001);
+    unsigned short tmp[device->getMaxSize()];
+
+    // success = device->readCCD(0, 0, pixelCX, pixelCY, 1, 1, 0.001);
 
     int rc = 0;
 
@@ -591,14 +780,14 @@ int main(int argc, char *argv[])
         perror("ext_img->metadata");
         goto end;
     }
-    memset(ext_img->metadata, 0x0, sizeof(net_meta));
-    if (success)
-        success = device->getImage(tmp, pixelCX * pixelCY);
-    else
-    {
-        cout << "Could not get first exposure" << endl;
-        goto end;
-    }
+    // memset(ext_img->metadata, 0x0, sizeof(net_meta));
+    // if (success)
+    //     success = device->getImage(tmp, pixelCX * pixelCY);
+    // else
+    // {
+    //     cout << "Could not get first exposure" << endl;
+    //     goto end;
+    // }
 
     pthread_t cmd_thread;
     rc = pthread_create(&cmd_thread, NULL, &cmd_fcn, (void *)ext_img);
@@ -609,26 +798,12 @@ int main(int argc, char *argv[])
     }
     while (!done)
     {
-        unsigned width = device->imageWidth(pixelCX, 1);
-        unsigned height = device->imageWidth(pixelCY, 1);
-        if (exposure > maxShortExp)
-        {
-            success = device->startExposure(false);
-            if (!success || done)
-            {
-                cout << "Failed to start long exposure" << endl;
-                return -1;
-            }
-            long delay = device->delay(exposure);
-            cout << "Exposure delay: " << delay << " us" << endl;
-            usleep(delay);
-            success = device->readCCD(0, 0, pixelCX, pixelCY, 1, 1);
-        }
-        else
-            success = device->readCCD(0, 0, pixelCX, pixelCY, 1, 1, exposure);
+        AtikImageProps *props = device->snapPicture(1, exposure);
+        if (props == NULL)
+            continue;
         tnow.now();
         if (success && (!done))
-            success = device->getImage(tmp, width * height);
+            success = device->getPicture(tmp, props->width * props->height);
         if (!success)
         {
             eprintf("main: Error reading CCD\n");
@@ -637,10 +812,10 @@ int main(int argc, char *argv[])
         cout << "Obtained exposure" << endl;
         float temp = 0;
         if (!done)
-            success = device->getTemperatureSensorStatus(1, &temp);
+            temp = device->getTemp();
         cout << "temp measured" << endl;
         jpeg_image img;
-        img.convert_jpeg_image(tmp, width, height);
+        img.convert_jpeg_image(tmp, props->width, props->height);
         cout << "jpeg created" << endl;
         pthread_mutex_lock(&net_img_lock);
         cout << "mutex lock" << endl;
@@ -648,9 +823,9 @@ int main(int argc, char *argv[])
         cout << "CCD temp: " << ext_img->metadata->temp << " C" << endl;
         ext_img->metadata->tstamp = tnow.usec();
         cout << "Tstamp: " << ext_img->metadata->tstamp << endl;
-        ext_img->metadata->height = height;
+        ext_img->metadata->height = props->height;
         cout << "Height: " << ext_img->metadata->height << endl;
-        ext_img->metadata->width = width;
+        ext_img->metadata->width = props->width;
         cout << "Width: " << ext_img->metadata->width << endl;
         ext_img->metadata->exposure = exposure;
         cout << "Exposure: " << ext_img->metadata->exposure << endl;
@@ -658,9 +833,9 @@ int main(int argc, char *argv[])
         cout << "Size: " << ext_img->metadata->size << endl;
         pthread_mutex_unlock(&net_img_lock);
         if (!done)
-            exposure = find_optimum_exposure(tmp, width * height, exposure);
-        if (exposure < minShortExp)
-            exposure = minShortExp;
+            exposure = find_optimum_exposure(tmp, props->width * props->height, exposure);
+        if (exposure < device->minShortExp)
+            exposure = device->minShortExp;
         if (exposure > MAX_ALLOWED_EXPOSURE)
             exposure = MAX_ALLOWED_EXPOSURE;
     }
@@ -671,7 +846,5 @@ int main(int argc, char *argv[])
 end:
     free(ext_img->metadata);
     free(ext_img);
-    delete devcap;
-    device->close();
     return 0;
 }

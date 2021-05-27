@@ -18,6 +18,8 @@ UNAME_S := $(shell uname -s)
 
 CXXFLAGS:= -I include/ -I imgui/include -I imgui/include/imgui -I imgui/include/backend -I ./ -Wall -O2 -fpermissive -std=gnu++11
 LIBS = -lpthread -ljpeg
+ATIKCXXFLAGS = -Wall -O2 -std=gnu++11
+ATIKLDFLAGS = -lpthread -lm -latikccd -lusb-1.0 -ljpeg -lcfitsio
 
 ifeq ($(UNAME_S), Linux) #LINUX
 	ECHO_MESSAGE = "Linux"
@@ -45,23 +47,17 @@ all: CFLAGS+= -O2
 
 GUITARGET=client.out
 
-CTARGET=server.out
-
-COBJS=server.o
-
 CPPOBJS=guimain.o
 
 TESTJPEG=jpegtest.o
 
-all: $(GUITARGET) $(TESTJPEG) $(CTARGET) imgui/libimgui_glfw.a
+all: $(GUITARGET) $(TESTJPEG) atikserver.o imgui/libimgui_glfw.a
 	$(CXX) $(CXXFLAGS) -o testjpeg.out $(TESTJPEG) imgui/libimgui_glfw.a $(LIBS)
+	$(CXX) $(ATIKCXXFLAGS) -o atikserver.out atikserver.o $(ATIKLDFLAGS) 
 	$(ECHO) "Built for $(UNAME_S), execute ./$(GUITARGET)"
 
 $(GUITARGET): $(CPPOBJS) imgui/libimgui_glfw.a
 	$(CXX) $(CXXFLAGS) -o $@ $(CPPOBJS) imgui/libimgui_glfw.a $(LIBS)
-
-$(CTARGET): $(COBJS) 
-	$(CC) $(EDCFLAGS) -o $@ $(COBJS) $(EDLDFLAGS)
 
 imgui/libimgui_glfw.a:
 	cd $(PWD)/imgui && make -j$(nproc) && cd $(PWD)
