@@ -549,7 +549,7 @@ private:
     {
         bool success = false;
         if (img->data != NULL)
-            success = device->getImage((unsigned short *)img->data), img->width * img->height);
+            success = device->getImage((unsigned short *)img->data, img->width * img->height);
         return success;
     }
 
