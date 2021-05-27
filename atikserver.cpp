@@ -693,11 +693,6 @@ public:
                 throw std::runtime_error("Could not initialize first exposure");
                 goto err;
             }
-            if (!getPicture(tmp, pixelCY * pixelCX))
-            {
-                throw std::runtime_error("Could not get first exposure");
-                goto err;
-            }
             return;
         }
         else
