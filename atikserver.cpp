@@ -613,7 +613,7 @@ public:
         img->exposure = exposure;
         img->height = height;
         img->width = width;
-        img->tstamp = tnow->usec();
+        tnow->now(); // update time
         if (exposure > maxShortExp)
         {
             success = device->startExposure(false);
@@ -635,6 +635,7 @@ public:
         }
         // get temperature
         img->temp = getTemp(); // get temperature AFTER exposure
+        img->tstamp = tnow->usec();
         return prop;
     }
 
