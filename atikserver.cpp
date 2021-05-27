@@ -238,29 +238,6 @@ typedef struct
     unsigned char *data;
 } net_image;
 
-void saveFits(const char *fileName, comic_image *image)
-{
-    fitsfile *fptr;
-    int status = 0, bitpix = USHORT_IMG, naxis = 2;
-    int bzero = 32768, bscale = 1;
-    long naxes[2] = {(long)(image->width), (long)(image->height)};
-    unlink(fileName);
-    if (!fits_create_file(&fptr, fileName, &status))
-    {
-        fits_create_img(fptr, bitpix, naxis, naxes, &status);
-        fits_write_key(fptr, TSTRING, "PROGRAM", (void *)"atik_ccd_test", NULL, &status);
-        fits_write_key(fptr, TUSHORT, "BZERO", &bzero, NULL, &status);
-        fits_write_key(fptr, TUSHORT, "BSCALE", &bscale, NULL, &status);
-        fits_write_key(fptr, TFLOAT, "SENSOR TEMP", &(image->temp), NULL, &status);
-        long fpixel[] = {1, 1};
-        fits_write_pix(fptr, TUSHORT, fpixel, (image->width) * (image->height), image->data, &status);
-        fits_close_file(fptr, &status);
-        cerr << endl
-             << "saved to " << fileName << endl
-             << endl;
-    }
-}
-
 bool checkSaturation(unsigned short *img, unsigned int size)
 {
     int count = size * 0.9; // 90% pixels are not saturated
@@ -588,7 +565,7 @@ public:
                 maxShortExp = devcap->maxShortExposure;
                 exposure = maxShortExp; // startup
                 maxBin = maxBinX > maxBinY ? maxBinY : maxBinX;
-                img->data = NULL; // memset
+                img->data = NULL;                            // memset
                 img->data = new uint16_t[pixelCX * pixelCY]; // max data
             }
             else
@@ -712,10 +689,40 @@ public:
             devopen = false;
         }
     }
+
+    bool saveFits()
+    {
+        if (img->tstamp == 0) // not snapped
+            return false;
+        char fileName[256];
+        snprintf(fileName, sizeof(fileName), "fits/%llu.fit[compress]", img->tstamp/1000);
+        fitsfile *fptr;
+        int status = 0, bitpix = USHORT_IMG, naxis = 2;
+        int bzero = 32768, bscale = 1;
+        long naxes[2] = {(long)(img->width), (long)(img->height)};
+        unlink(fileName);
+        if (!fits_create_file(&fptr, fileName, &status))
+        {
+            fits_create_img(fptr, bitpix, naxis, naxes, &status);
+            fits_write_key(fptr, TSTRING, "PROGRAM", (void *)"atik_ccd_test", NULL, &status);
+            fits_write_key(fptr, TUSHORT, "BZERO", &bzero, NULL, &status);
+            fits_write_key(fptr, TUSHORT, "BSCALE", &bscale, NULL, &status);
+            fits_write_key(fptr, TFLOAT, "SENSOR TEMP", &(img->temp), NULL, &status);
+            fits_write_key(fptr, TFLOAT, "EXPOSURE", &(img->exposure), NULL, &status);
+            fits_write_key(fptr, TULONGLONG, "TIMESTAMP", &(img->tstamp), NULL, &status);
+            long fpixel[] = {1, 1};
+            fits_write_pix(fptr, TUSHORT, fpixel, (img->width) * (img->height), img->data, &status);
+            fits_close_file(fptr, &status);
+            cerr << endl
+                 << "saved to " << fileName << endl
+                 << endl;
+        }
+    }
 };
 
 int main(int argc, char *argv[])
 {
+    bool saveFit = true; // mark false if not needed
     signal(SIGINT, sig_handler);
     gpioSetMode(11, GPIO_OUT);
     gpioWrite(11, GPIO_HIGH);
@@ -762,6 +769,8 @@ int main(int argc, char *argv[])
             // continue;
         }
         cout << "Obtained exposure" << endl;
+        if (saveFit)
+            device->saveFits();
         jpeg_image img;
         img.convert_jpeg_image(props->data, props->width, props->height);
         cout << "jpeg created" << endl;
@@ -790,6 +799,7 @@ int main(int argc, char *argv[])
     cout << "main: Out of loop" << endl
          << flush;
     done = 1;
+    sleep(1);
     rc = pthread_cancel(cmd_thread);
 end:
     free(ext_img->metadata);
