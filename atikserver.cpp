@@ -577,7 +577,9 @@ public:
             }
             else
                 return false;
+            return true;
         }
+        return false;
     }
 
     AtikImageProps *snapPicture(unsigned ofX, unsigned ofY, unsigned sX, unsigned sY, unsigned bin, double exposure)
