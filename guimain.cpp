@@ -340,77 +340,68 @@ void *rcv_thr(void *sock)
     img.metadata = (net_meta *)malloc(sizeof(net_meta));
     img.data = (unsigned char *)malloc(1024 * 1024 * 4);
     memset(rcv_buf, 0x0, sizeof(rcv_buf));
-    int data_read_sz = 0;
-    int offset = 0;
-    char *head = NULL, *tail = NULL;
     while (!done)
     {
-    reset_head:
         memset(rcv_buf, 0x0, sizeof(rcv_buf));
-        usleep(1000 * 1000 / 30); // receive at 30 Hz
-
-        do // read size header
+        usleep(1000 * 1000 / 30); // receive at 120 Hz
+        if (conn_rdy)
         {
-            int sz = recv(*(int *)sock, rcv_buf + offset, sizeof(rcv_buf) - offset, 0);
-            offset += sz;
-            if ((offset > 4) && (offset < sizeof(rcv_buf))) // look for "SIZE"
+            // char tmp_buf[8];
+            // ssize_t sz = recv(*(int *)sock, tmp_buf, sizeof(tmp_buf), 0);
+            // if (sz <= 0)
+            //     continue; // did not receive anything
+            // else
+            //     fprintf(stderr, "Received: %ld bytes\n", sz);
+            // fprintf(stderr, "Received: %c%c%c%c%d", tmp_buf[0], tmp_buf[1], tmp_buf[2], tmp_buf[3], *(int *)(&tmp_buf[4]));
+            // if (tmp_buf[0] == 'H' && tmp_buf[1] == 'E' && tmp_buf[2] == 'A' && tmp_buf[3] == 'D')
+            // {
+            //     sz = *(int32_t *)(&tmp_buf[4]);
+            //     fprintf(stderr, "Data to receive: %ld bytes\n", sz);
+            // }
+            // else
+            //     continue;
+            int offset = 0;
+            char *head = NULL, *tail = NULL;
+            do
             {
-                if (find_match(rcv_buf, offset, (char *)"SIZE", 4) != NULL)
-                {
+                int sz = recv(*(int *)sock, rcv_buf + offset, sizeof(rcv_buf) - offset, 0);
+                if (sz < 0)
+                    continue;
+                offset += sz;
+                head = find_match(rcv_buf, sizeof(rcv_buf), (char *)"FBEGIN", 6);
+                if (head != NULL)
+                    tail = find_match(head, sizeof(rcv_buf) - (head - rcv_buf), (char *)"FEND", 4);
+                // fprintf(stderr, "received: total %d bytes, head: %p, tail: %p\n", offset, (void *)(head), (void *)(tail));
+                // for (int i = 0; i < offset; i++)
+                //     fprintf(stderr, "%c", rcv_buf[i]);
+                // fprintf(stderr, "\n");
+                if (head != NULL && tail != NULL)
                     break;
+            } while (conn_rdy);
+            if (head != NULL)
+            {
+                // fprintf(stderr, "%s: Head found at 0x%p\n", __func__, (void *)head);
+                if (tail != NULL && tail > head)
+                {
+                    // fprintf(stderr, "%s: Tail found at 0x%p\n", __func__, (void *)tail);
+                    pthread_mutex_lock(&lock);
+                    memcpy(img.metadata, head + 6, sizeof(net_meta));
+                    fprintf(stderr, "Tstamp: %lu\n", img.metadata->tstamp);
+                    fprintf(stderr, "Width: %u\n", img.metadata->width);
+                    fprintf(stderr, "Hidth: %u\n", img.metadata->height);
+                    fprintf(stderr, "Temp: %f\n", img.metadata->temp);
+                    fprintf(stderr, "Exposure: %f s\n", img.metadata->exposure);
+                    fprintf(stderr, "JPEG Size: %d\n", img.metadata->size);
+                    if (img.metadata->size > 0)
+                    {
+                        memcpy(img.data, head + 6 + sizeof(net_meta), img.metadata->size);
+                    }
+                    pthread_mutex_unlock(&lock);
+                    if (head + 6 + sizeof(net_meta) + img.metadata->size != tail)
+                    {
+                        fprintf(stderr, "Head + data does not match tail: 0x%p and 0x%p\n", (void *)(head + 6 + sizeof(net_meta) + img.metadata->size), (void *)tail);
+                    }
                 }
-            }
-            else if (offset >= sizeof(rcv_buf)) // overload
-            {
-                goto reset_head;
-            }
-        } while (conn_rdy);
-        // read data size
-        data_read_sz = 0;
-        offset = 0;
-        do
-        {
-            int sz = recv(*(int *)sock, rcv_buf + offset, sizeof(int) - offset, 0);
-            offset += sz;
-        } while (conn_rdy && (offset < sizeof(int)));
-        if (data_read_sz <= 0) // error
-            goto reset_head;
-        // read data bytes
-        offset = 0;
-        do
-        {
-            int sz = recv(*(int *)sock, rcv_buf + offset, data_read_sz - offset, 0);
-            if (sz < 0)
-                goto reset_head;
-            offset += sz;
-        } while (conn_rdy && (offset < data_read_sz)); // wait till all data is received
-        // find payload
-        head = find_match(rcv_buf, sizeof(rcv_buf), (char *)"FBEGIN", 6);
-        if (head != NULL)
-            tail = find_match(head, sizeof(rcv_buf) - (head - rcv_buf), (char *)"FEND", 4);
-        else
-            goto reset_head;
-        // payload found
-        if ((tail != NULL) && (tail > head))
-        {
-            // fprintf(stderr, "%s: Head found at 0x%p\n", __func__, (void *)head);
-            // fprintf(stderr, "%s: Tail found at 0x%p\n", __func__, (void *)tail);
-            pthread_mutex_lock(&lock);
-            memcpy(img.metadata, head + 6, sizeof(net_meta));
-            fprintf(stderr, "Tstamp: %lu\n", img.metadata->tstamp);
-            fprintf(stderr, "Width: %u\n", img.metadata->width);
-            fprintf(stderr, "Hidth: %u\n", img.metadata->height);
-            fprintf(stderr, "Temp: %f\n", img.metadata->temp);
-            fprintf(stderr, "Exposure: %f s\n", img.metadata->exposure);
-            fprintf(stderr, "JPEG Size: %d\n", img.metadata->size);
-            if (img.metadata->size > 0)
-            {
-                memcpy(img.data, head + 6 + sizeof(net_meta), img.metadata->size);
-            }
-            pthread_mutex_unlock(&lock);
-            if (head + 6 + sizeof(net_meta) + img.metadata->size != tail)
-            {
-                fprintf(stderr, "Head + data does not match tail: 0x%p and 0x%p\n", (void *)(head + 6 + sizeof(net_meta) + img.metadata->size), (void *)tail);
             }
         }
     }
@@ -590,7 +581,7 @@ int main(int, char **)
                 strftime(buf, sizeof(buf), "%a %Y-%m-%d %H:%M:%S %Z", &ts);
                 ImGui::Text(u8"Timestamp: %s | Exposure: %.3f s | CCD Temp: %.2f °C", buf, img.metadata->exposure, img.metadata->temp);
                 imagedata live_image;
-                live_image.max_size = 1024 * 1024 * 4 * 2;
+                live_image.max_size = 1024*1024*4*2;
                 live_image.data = (unsigned char *)malloc(live_image.max_size);
                 LoadTextureFromMem(img.data, (img.metadata->size), &live_image);
                 float w = ImGui::GetContentRegionAvailWidth();

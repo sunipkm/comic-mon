@@ -719,57 +719,8 @@ int main(int argc, char *argv[])
     Atik414ex *device = new Atik414ex();
     double exposure;
     bool success;
-    // static AtikCamera *devices[1];
-    // int count = AtikCamera::list(devices, 1);
-    // AtikCamera *device = devices[0];
-    // cout << "open " << device->getName() << endl;
-
-    // bool success = device->open();
-
-    // if (success)
-    //     cout << "Opened camera successfully" << endl;
-
-    // AtikCapabilities *devcap = new AtikCapabilities;
-    // const char *devname;
-    // CAMERA_TYPE type;
-    // success = device->getCapabilities(&devname, &type, devcap);
-
-    // if (!success)
-    // {
-    //     cout << "Could not get capabilites" << endl;
-    //     return -1;
-    // }
-
-    // unsigned pixelCX = devcap->pixelCountX;
-    // unsigned pixelCY = devcap->pixelCountY;
-
-    // unsigned pixelSX = devcap->pixelSizeX;
-    // unsigned pixelSY = devcap->pixelSizeY;
-
-    // unsigned maxBinX = devcap->maxBinX;
-    // unsigned maxBinY = devcap->maxBinY;
-
-    // unsigned tempSensorCount = devcap->tempSensorCount;
-
-    // int offsetX = devcap->offsetX;
-    // int offsetY = devcap->offsetY;
-
-    // bool longExpMode = devcap->supportsLongExposure;
-
-    // double minShortExp = devcap->minShortExposure;
-    // double maxShortExp = devcap->maxShortExposure;
-
-    // double exposure = maxShortExp;
-
-    // unsigned maxPixBin = maxBinX > maxBinY ? maxBinY : maxBinX;
-
-    // cout << "Max Pixel Bin: " << maxPixBin << endl;
-
-    // maxPixBin = 4;
 
     unsigned short tmp[device->getMaxSize()];
-
-    // success = device->readCCD(0, 0, pixelCX, pixelCY, 1, 1, 0.001);
 
     int rc = 0;
 
@@ -790,14 +741,6 @@ int main(int argc, char *argv[])
         perror("ext_img->metadata");
         goto end;
     }
-    // memset(ext_img->metadata, 0x0, sizeof(net_meta));
-    // if (success)
-    //     success = device->getImage(tmp, pixelCX * pixelCY);
-    // else
-    // {
-    //     cout << "Could not get first exposure" << endl;
-    //     goto end;
-    // }
 
     pthread_t cmd_thread;
     rc = pthread_create(&cmd_thread, NULL, &cmd_fcn, (void *)ext_img);
