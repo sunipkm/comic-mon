@@ -709,7 +709,7 @@ public:
             fits_write_key(fptr, TUSHORT, "BSCALE", &bscale, NULL, &status);
             fits_write_key(fptr, TFLOAT, "SENSOR TEMP", &(img->temp), NULL, &status);
             fits_write_key(fptr, TFLOAT, "EXPOSURE", &(img->exposure), NULL, &status);
-            fits_write_key(fptr, TULONGLONG, "TIMESTAMP", &(img->tstamp), NULL, &status);
+            fits_write_key(fptr, TLONGLONG, "TIMESTAMP", &(img->tstamp), NULL, &status);
             long fpixel[] = {1, 1};
             fits_write_pix(fptr, TUSHORT, fpixel, (img->width) * (img->height), img->data, &status);
             fits_close_file(fptr, &status);
