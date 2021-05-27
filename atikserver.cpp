@@ -550,6 +550,8 @@ private:
         bool success = false;
         if (img->data != NULL)
             success = device->getImage((unsigned short *)img->data, img->width * img->height);
+        else
+            eprintf("Image data is null");
         eprintf("Success: %d", success);
         return success;
     }
@@ -589,6 +591,7 @@ public:
                 maxShortExp = devcap->maxShortExposure;
                 exposure = maxShortExp; // startup
                 maxBin = maxBinX > maxBinY ? maxBinY : maxBinX;
+                img->data = NULL; // memset
                 img->data = new uint16_t[pixelCX * pixelCY]; // max data
             }
             else
@@ -687,8 +690,6 @@ public:
                 goto err;
             }
             sleep(1);
-            // get first exposure
-            unsigned tmp[pixelCX * pixelCY];
             if (snapPicture(1, minShortExp) == NULL)
             {
                 throw std::runtime_error("Could not initialize first exposure");
