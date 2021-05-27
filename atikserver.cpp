@@ -550,6 +550,7 @@ private:
         bool success = false;
         if (img->data != NULL)
             success = device->getImage((unsigned short *)img->data, img->width * img->height);
+        eprintf("Success: %d", success);
         return success;
     }
 
@@ -756,7 +757,10 @@ int main(int argc, char *argv[])
     {
         AtikImage *props = device->snapPicture(1, exposure);
         if (props == NULL)
-            continue;
+        {
+            eprintf("Props is null");
+            // continue;
+        }
         cout << "Obtained exposure" << endl;
         jpeg_image img;
         img.convert_jpeg_image(props->data, props->width, props->height);
