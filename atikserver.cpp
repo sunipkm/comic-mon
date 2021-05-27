@@ -690,6 +690,7 @@ public:
                 goto err;
             }
             sleep(1);
+            eprintf("Out of sleep");
             if (snapPicture(1, minShortExp) == NULL)
             {
                 throw std::runtime_error("Could not initialize first exposure");
