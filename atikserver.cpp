@@ -34,11 +34,11 @@ extern "C"
 #define SO_REUSEPORT 15
 #endif
 
-#define eprintf(str, ...) \
-{ \
-    fprintf(stderr, "%s, %d: " str "\n", __func__, __LINE__,  ##__VA_ARGS__); \
-    fflush(stderr); \
-}
+#define eprintf(str, ...)                                                        \
+    {                                                                            \
+        fprintf(stderr, "%s, %d: " str "\n", __func__, __LINE__, ##__VA_ARGS__); \
+        fflush(stderr);                                                          \
+    }
 
 using namespace std;
 
@@ -524,9 +524,14 @@ void *cmd_fcn(void *img)
 
 typedef struct
 {
-    unsigned width;
-    unsigned height;
-} AtikImageProps;
+    uint16_t *data;
+    uint32_t width;
+    uint32_t height;
+    float temp;
+    float exposure;
+    uint64_t tstamp;
+} AtikImage;
+
 class Atik414ex
 {
 private:
@@ -536,8 +541,17 @@ private:
     bool devopen;
     unsigned tscount, maxBinX, maxBinY;
     bool longExpMode;
-    AtikImageProps imgprop[1];
     double exposure;
+    systime tnow[1];
+    AtikImage img[1];
+
+    bool getPicture()
+    {
+        bool success = false;
+        if (img->data != NULL)
+            success = device->getImage((unsigned short *)img->data), img->width * img->height);
+        return success;
+    }
 
 public:
     unsigned pixelCX, pixelCY, maxBin;
@@ -574,6 +588,7 @@ public:
                 maxShortExp = devcap->maxShortExposure;
                 exposure = maxShortExp; // startup
                 maxBin = maxBinX > maxBinY ? maxBinY : maxBinX;
+                img->data = new uint16_t[pixelCX * pixelCY]; // max data
             }
             else
                 return false;
@@ -582,9 +597,9 @@ public:
         return false;
     }
 
-    AtikImageProps *snapPicture(unsigned ofX, unsigned ofY, unsigned sX, unsigned sY, unsigned bin, double exposure)
+    AtikImage *snapPicture(unsigned ofX, unsigned ofY, unsigned sX, unsigned sY, unsigned bin, double exposure)
     {
-        AtikImageProps *prop = NULL; // start with NULL
+        AtikImage *prop = NULL; // start with NULL
         unsigned height = device->imageHeight(sY, bin);
         unsigned width = device->imageWidth(sX, bin);
 
@@ -594,6 +609,10 @@ public:
         }
         // snap picture
         bool success = false;
+        img->exposure = exposure;
+        img->height = height;
+        img->width = width;
+        img->tstamp = tnow->usec();
         if (exposure > maxShortExp)
         {
             success = device->startExposure(false);
@@ -607,28 +626,28 @@ public:
         }
         else
             success = device->readCCD(ofX, ofY, sX, sY, bin, bin, exposure);
-
+        // get temperature
+        img->temp = getTemp();
         // set imgprop properties
         if (success)
         {
-            imgprop->width = width;
-            imgprop->height = height;
-            prop = imgprop;
+            if (getPicture())
+                prop = img;
         }
         return prop;
     }
 
-    AtikImageProps *snapPicture(unsigned ofX, unsigned ofY, unsigned sX, unsigned sY, unsigned bin)
+    AtikImage *snapPicture(unsigned ofX, unsigned ofY, unsigned sX, unsigned sY, unsigned bin)
     {
         return snapPicture(ofX, ofY, sX, sY, bin, exposure);
     }
 
-    AtikImageProps *snapPicture(unsigned bin, double exposure)
+    AtikImage *snapPicture(unsigned bin, double exposure)
     {
         return snapPicture(0, 0, pixelCX, pixelCY, bin, exposure);
     }
 
-    AtikImageProps *snapPicture(unsigned bin)
+    AtikImage *snapPicture(unsigned bin)
     {
         return snapPicture(bin, exposure);
     }
@@ -641,17 +660,6 @@ public:
     double getExposure()
     {
         return this->exposure;
-    }
-
-    bool getPicture(void *ptr, size_t len)
-    {
-        // copy image to ptr
-        if (len < imgprop->width * imgprop->height)
-        {
-            return false;
-        }
-        bool success = device->getImage((unsigned short *)ptr, imgprop->width * imgprop->height);
-        return success;
     }
 
     float getTemp()
@@ -703,11 +711,11 @@ public:
     {
         if (devopen)
         {
+            del img->data;
             device->close();
             devopen = false;
         }
     }
-    
 };
 
 int main(int argc, char *argv[])
@@ -751,36 +759,24 @@ int main(int argc, char *argv[])
     }
     while (!done)
     {
-        AtikImageProps *props = device->snapPicture(1, exposure);
+        AtikImage *props = device->snapPicture(1, exposure);
         if (props == NULL)
             continue;
-        tnow.now();
-        if (success && (!done))
-            success = device->getPicture(tmp, props->width * props->height);
-        if (!success)
-        {
-            eprintf("main: Error reading CCD\n");
-            break;
-        }
         cout << "Obtained exposure" << endl;
-        float temp = 0;
-        if (!done)
-            temp = device->getTemp();
-        cout << "temp measured" << endl;
         jpeg_image img;
-        img.convert_jpeg_image(tmp, props->width, props->height);
+        img.convert_jpeg_image(props->data, props->width, props->height);
         cout << "jpeg created" << endl;
         pthread_mutex_lock(&net_img_lock);
         cout << "mutex lock" << endl;
-        ext_img->metadata->temp = temp;
+        ext_img->metadata->temp = props->temp;
         cout << "CCD temp: " << ext_img->metadata->temp << " C" << endl;
-        ext_img->metadata->tstamp = tnow.usec();
+        ext_img->metadata->tstamp = props->tstamp;
         cout << "Tstamp: " << ext_img->metadata->tstamp << endl;
         ext_img->metadata->height = props->height;
         cout << "Height: " << ext_img->metadata->height << endl;
         ext_img->metadata->width = props->width;
         cout << "Width: " << ext_img->metadata->width << endl;
-        ext_img->metadata->exposure = exposure;
+        ext_img->metadata->exposure = props->exposure;
         cout << "Exposure: " << ext_img->metadata->exposure << endl;
         ext_img->metadata->size = img.copy_image(ext_img->data);
         cout << "Size: " << ext_img->metadata->size << endl;
