@@ -711,7 +711,7 @@ public:
     {
         if (devopen)
         {
-            del img->data;
+            delete[] img->data;
             device->close();
             devopen = false;
         }
