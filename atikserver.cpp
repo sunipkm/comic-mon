@@ -617,6 +617,7 @@ public:
         img->height = height;
         img->width = width;
         img->tstamp = tnow->usec();
+        eprintf("Starting exposure");
         if (exposure > maxShortExp)
         {
             success = device->startExposure(false);
