@@ -503,9 +503,9 @@ void *cmd_fcn(void *img)
                 perror("accept");
 #endif
             }
+            else
+                conn_rdy = true;
         }
-        else
-            conn_rdy = true;
         usleep(1000000 / 2); // 30 Hz
     }
 
