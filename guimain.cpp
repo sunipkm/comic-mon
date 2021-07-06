@@ -19,11 +19,11 @@
 #include <signal.h>
 #include <errno.h>
 
-#define eprintf(str, ...) \
-{ \
-    fprintf(stderr, "%s,%d: " str "\n", __func__, __LINE__, ##__VA_ARGS__); \
-    fflush(stderr); \
-}
+#define eprintf(str, ...)                                                       \
+    {                                                                           \
+        fprintf(stderr, "%s,%d: " str "\n", __func__, __LINE__, ##__VA_ARGS__); \
+        fflush(stderr);                                                         \
+    }
 
 int connect_w_tout(int soc, const struct sockaddr *addr, socklen_t sock_sz, int tout_s)
 {
@@ -305,6 +305,7 @@ typedef struct __attribute__((packed))
     char num_exposures;  // number of exposures
     char binning;        // binning
     double exposure;     // exposure time
+    char prefix[10];     // output prefix
 } net_cmd;
 
 typedef struct
@@ -381,17 +382,17 @@ void *rcv_thr(void *sock)
                     do
                     {
                         offset += recv(*(int *)sock, rcv_buf + offset, 3, 0); // receive SIZE
-                    } while((offset < 4) && conn_rdy);
+                    } while ((offset < 4) && conn_rdy);
                 }
                 if ((rcv_buf[0] == 'S') && (rcv_buf[1] == 'I') && (rcv_buf[2] == 'Z') && (rcv_buf[3] == 'E'))
                     break;
-            } while(conn_rdy);
+            } while (conn_rdy);
             // read size of buffer
             int payload_sz = 0;
             offset = 0;
             do
             {
-                char *psz = (char *) &payload_sz;
+                char *psz = (char *)&payload_sz;
                 offset += recv(*(int *)sock, psz + offset, sizeof(int), 0);
             } while ((offset < 4) && conn_rdy);
             // now we have payload size
@@ -595,6 +596,8 @@ int main(int, char **)
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
             bool send_cmd = false;
             static int binning = 1;
+            bool start_exposure = false;
+            static bool stop_exposure = false;
             if (conn_rdy && sock > 0)
             {
                 if (ImGui::InputInt("JPEG Quality", &jpg_qty, 1, 10, ImGuiInputTextFlags_EnterReturnsTrue))
@@ -609,11 +612,34 @@ int main(int, char **)
                     if (binning > 4)
                         binning = 4;
                 }
+                static char exposure_name[10] = "test";
+                static int num_exposures = 10;
+                ImGui::InputText("Exposure Name", exposure_name, 10, ImGuiInputTextFlags_None);
+                if (ImGui::InputInt("Number of exposures", &num_exposures, 0, 0, ImGuiInputTextFlags_None))
+                {
+                    if (num_exposures < 1)
+                        num_exposures = 1;
+                    if (num_exposures > 127)
+                        num_exposures = 127;
+                }
+                if (ImGui::Button("Start Exposure"))
+                {
+                    start_exposure = true;
+                }
                 if (send_cmd)
                 {
                     memset(atikcmd, 0x0, sizeof(net_cmd));
                     atikcmd->jpeg_quality = jpg_qty;
                     atikcmd->binning = binning;
+                    atikcmd->num_exposures = num_exposures;
+                    if (start_exposure)
+                        atikcmd->start_exposure = 1;
+                    if (stop_exposure)
+                    {
+                        atikcmd->stop_exposure = 1;
+                        stop_exposure = false;
+                    }
+                    memcpy(atikcmd->prefix, exposure_name, 10);
                     send(sock, atikcmd, sizeof(net_cmd), 0);
                     send_cmd = false;
                 }
@@ -632,9 +658,16 @@ int main(int, char **)
                 strftime(buf, sizeof(buf), "%a %Y-%m-%d %H:%M:%S %Z", &ts);
                 ImGui::Text(u8"Timestamp: %s | Size: %d x %d | Exposure: %.3f s | CCD Temp: %.2f °C", buf, img.metadata->width, img.metadata->height, img.metadata->exposure, img.metadata->temp);
                 ImGui::Text(u8"Recording exposures: %s | On exposure: %d | Total Exposures: %d", img.metadata->exposing ? "YES" : "NO ", img.metadata->curr_exposure, img.metadata->num_exposures);
+                if (ImGui::Button("Stop Exposure"))
+                {
+                    if (img.metadata->exposing)
+                    {
+                        stop_exposure = true;
+                    }
+                }
                 jpg_qty = img.metadata->jpeg_quality;
                 imagedata live_image;
-                live_image.max_size = 1024*1024*4*2;
+                live_image.max_size = 1024 * 1024 * 4 * 2;
                 live_image.data = (unsigned char *)malloc(live_image.max_size);
                 LoadTextureFromMem(img.data, (img.metadata->size), &live_image);
                 float w = ImGui::GetContentRegionAvailWidth();

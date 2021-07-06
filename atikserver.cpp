@@ -241,6 +241,7 @@ typedef struct __attribute__((packed))
     char num_exposures;  // number of exposures
     char binning;        // binning
     double exposure;     // exposure time
+    char prefix[10];     // output prefix
 } net_cmd;
 
 pthread_mutex_t net_img_lock;
@@ -781,6 +782,7 @@ int main(int argc, char *argv[])
     char num_exposures, curr_exposure;
     static int exposure_set = 0;
     int binning = 1, const_binning = 1;
+    int file_prefix[10];
     signal(SIGINT, sig_handler);
     gpioSetMode(11, GPIO_OUT);
     gpioWrite(11, GPIO_HIGH);
@@ -835,6 +837,7 @@ int main(int argc, char *argv[])
                     const_binning = 1;
                 else if (const_binning > 4)
                     const_binning = 4;
+                memcpy(file_prefix, atikcmd->prefix, 10);
                 exposure_set++;
             }
             else if (exposing && atikcmd->stop_exposure)
@@ -884,7 +887,7 @@ int main(int argc, char *argv[])
             ext_img->metadata->num_exposures = num_exposures;
             ext_img->metadata->exposing = exposing;
             char prefix[100];
-            snprintf(prefix, 100, "set%d_%.3lf_%d_%d", exposure_set, const_exposure, curr_exposure, num_exposures);
+            snprintf(prefix, 100, "%s_set%d_%.3lf_%d_%d", file_prefix, exposure_set, const_exposure, curr_exposure, num_exposures);
             device->saveFits(prefix);
         }
         pthread_mutex_unlock(&net_img_lock);
