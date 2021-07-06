@@ -294,6 +294,7 @@ typedef struct __attribute__((packed))
     char num_exposures;
     char curr_exposure;
     char jpeg_quality;
+    char binning;
     int size;
 } net_meta;
 
@@ -641,6 +642,7 @@ int main(int, char **)
                     atikcmd->jpeg_quality = jpg_qty;
                     atikcmd->binning = binning;
                     atikcmd->num_exposures = num_exposures;
+                    atikcmd->exposure = sys_exposure;
                     if (start_exposure)
                         atikcmd->start_exposure = 1;
                     if (stop_exposure)
@@ -676,6 +678,7 @@ int main(int, char **)
                     }
                 }
                 jpg_qty = img.metadata->jpeg_quality;
+                binning = img.metadata->binning;
                 imagedata live_image;
                 live_image.max_size = 1024 * 1024 * 4 * 2;
                 live_image.data = (unsigned char *)malloc(live_image.max_size);

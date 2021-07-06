@@ -230,6 +230,7 @@ typedef struct __attribute__((packed))
     char num_exposures;
     char curr_exposure;
     char jpeg_quality;
+    char binning;
     int size;
 } net_meta;
 
@@ -890,10 +891,12 @@ int main(int argc, char *argv[])
         cout << "Size: " << ext_img->metadata->size << endl;
         ext_img->metadata->jpeg_quality = jpeg_image::jpeg_quality;
         ext_img->metadata->exposing = exposing;
+        ext_img->metadata->binning = binning;
         if (exposing)
         {
             ext_img->metadata->curr_exposure = curr_exposure;
             ext_img->metadata->num_exposures = num_exposures;
+            ext_img->metadata->binning = const_binning;
             char prefix[100];
             snprintf(prefix, 100, "%s_set%d_%.3lf_%d_%d", file_prefix, exposure_set, const_exposure, curr_exposure, num_exposures);
             device->saveFits(prefix);
