@@ -303,6 +303,7 @@ typedef struct __attribute__((packed))
     char start_exposure; // start exposure command
     char stop_exposure;  // stop exposure command
     char num_exposures;  // number of exposures
+    char binning;        // binning
     double exposure;     // exposure time
 } net_cmd;
 
@@ -592,13 +593,29 @@ int main(int, char **)
                 }
             }
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+            bool send_cmd = false;
+            static int binning = 1;
             if (conn_rdy && sock > 0)
             {
                 if (ImGui::InputInt("JPEG Quality", &jpg_qty, 1, 10, ImGuiInputTextFlags_EnterReturnsTrue))
                 {
+                    send_cmd = true;
+                }
+                if (ImGui::InputInt("Binning", &binning, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue))
+                {
+                    send_cmd = true;
+                    if (binning < 0)
+                        binning = 1;
+                    if (binning > 4)
+                        binning = 4;
+                }
+                if (send_cmd)
+                {
                     memset(atikcmd, 0x0, sizeof(net_cmd));
                     atikcmd->jpeg_quality = jpg_qty;
+                    atikcmd->binning = binning;
                     send(sock, atikcmd, sizeof(net_cmd), 0);
+                    send_cmd = false;
                 }
             }
             if (conn_rdy && sock > 0)
@@ -613,7 +630,7 @@ int main(int, char **)
                 // Format time, "ddd yyyy-mm-dd hh:mm:ss zzz"
                 ts = *localtime(&tstamp.tv_sec);
                 strftime(buf, sizeof(buf), "%a %Y-%m-%d %H:%M:%S %Z", &ts);
-                ImGui::Text(u8"Timestamp: %s | Exposure: %.3f s | CCD Temp: %.2f °C", buf, img.metadata->exposure, img.metadata->temp);
+                ImGui::Text(u8"Timestamp: %s | Size: %d x %d | Exposure: %.3f s | CCD Temp: %.2f °C", buf, img.metadata->width, img.metadata->height, img.metadata->exposure, img.metadata->temp);
                 ImGui::Text(u8"Recording exposures: %s | On exposure: %d | Total Exposures: %d", img.metadata->exposing ? "YES" : "NO ", img.metadata->curr_exposure, img.metadata->num_exposures);
                 jpg_qty = img.metadata->jpeg_quality;
                 imagedata live_image;
