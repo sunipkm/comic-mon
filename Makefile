@@ -16,7 +16,10 @@ endif
 
 UNAME_S := $(shell uname -s)
 
-CXXFLAGS:= -I include/ -I imgui/include -I imgui/include/imgui -I imgui/include/backend -I ./ -Wall -O2 -fpermissive -std=gnu++11
+CXXFLAGS:= -I include/ -I imgui/include -I imgui/include/imgui -I imgui/include/backend -I ./ -Wall -O2 -fpermissive -std=gnu++11 \
+			-L/opt/homebrew/opt/jpeg-turbo/lib \
+			-I/opt/homebrew/opt/jpeg-turbo/include
+
 LIBS = -lpthread -ljpeg
 ATIKCXXFLAGS = -Wall -O2 -std=gnu++11
 ATIKLDFLAGS = -lpthread -lm -latikccd -lusb-1.0 -ljpeg -lcfitsio

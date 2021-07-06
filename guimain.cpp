@@ -305,6 +305,7 @@ typedef struct __attribute__((packed))
     char stop_exposure;  // stop exposure command
     char num_exposures;  // number of exposures
     char binning;        // binning
+    char autoexposure;   // autoexposure toggle
     double exposure;     // exposure time
     char prefix[10];     // output prefix
 } net_cmd;
@@ -547,7 +548,7 @@ int main(int, char **)
         // 2. Show a simple window that we create ourselves. We use a Begin/End pair to created a named window.
         {
             static int port = 12395;
-            static char ipaddr[16] = "192.168.1.18";
+            static char ipaddr[16] = "192.168.1.11";
             auto flag = ImGuiInputTextFlags_ReadOnly;
             if (!conn_rdy)
                 flag = (ImGuiInputTextFlags_)0;
@@ -599,6 +600,7 @@ int main(int, char **)
             static int binning = 1;
             bool start_exposure = false;
             static bool stop_exposure = false;
+            static bool autoexposure = true;
             static float sys_exposure = 0.001;
             if (conn_rdy && sock > 0)
             {
@@ -636,6 +638,10 @@ int main(int, char **)
                     start_exposure = true;
                     send_cmd = true;
                 }
+                if (ImGui::Checkbox("Auto Exposure", &autoexposure))
+                {
+                    send_cmd = true;
+                }
                 if (send_cmd)
                 {
                     memset(atikcmd, 0x0, sizeof(net_cmd));
@@ -643,6 +649,7 @@ int main(int, char **)
                     atikcmd->binning = binning;
                     atikcmd->num_exposures = num_exposures;
                     atikcmd->exposure = sys_exposure;
+                    atikcmd->autoexposure = autoexposure ? 1 : 0;
                     if (start_exposure)
                         atikcmd->start_exposure = 1;
                     if (stop_exposure)

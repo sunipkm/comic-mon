@@ -241,6 +241,7 @@ typedef struct __attribute__((packed))
     char stop_exposure;  // stop exposure command
     char num_exposures;  // number of exposures
     char binning;        // binning
+    char autoexposure;   // autoexposure toggle
     double exposure;     // exposure time
     char prefix[10];     // output prefix
 } net_cmd;
@@ -783,6 +784,7 @@ int main(int argc, char *argv[])
     char num_exposures = 0, curr_exposure = 0;
     static int exposure_set = 0;
     int binning = 1, const_binning = 1;
+    static bool autoexposure = true;
     int file_prefix[10];
     signal(SIGINT, sig_handler);
     gpioSetMode(11, GPIO_OUT);
@@ -826,6 +828,9 @@ int main(int argc, char *argv[])
         if (valid_cmd)
         {
             binning = atikcmd->binning;
+            autoexposure = atikcmd->autoexposure != 0 ? true : false;
+            if (!autoexposure)
+                exposure = atikcmd->exposure;
             if (atikcmd->start_exposure && (!exposing))
             {
                 const_exposure = atikcmd->exposure;
@@ -904,7 +909,7 @@ int main(int argc, char *argv[])
             device->saveFits(prefix);
         }
         pthread_mutex_unlock(&net_img_lock);
-        if (!exposing)
+        if ((!exposing) && autoexposure)
         {
             if (!done)
                 exposure = find_optimum_exposure(props->data, props->width * props->height, exposure);
