@@ -468,31 +468,33 @@ void *cmd_fcn(void *img)
         close(new_socket);
         return 0;
     }
-
+    bool conn_rdy = false;
     while (!done)
     {
-        pthread_mutex_lock(&net_img_lock);
         // cout << "Img: " << jpg->metadata->size << " bytes, metadata: " << sizeof(net_meta) << " bytes" << endl;
-        int sz = 0;
-        int32_t out_sz = jpg->metadata->size + sizeof(net_meta) + 18; // total size = size of metadata + size of image + FBEGIN + FEND
-        unsigned char *buf = (unsigned char *)malloc(out_sz);         // image size + image data area
-        memcpy(buf, "SIZE", 4);
-        memcpy(buf + 4, &out_sz, 4);
-        memcpy(buf + 8, "FBEGIN", 6);                                         // copy FBEGIN
-        memcpy(buf + 14, jpg->metadata, sizeof(net_meta));                    // copy metadata
-        memcpy(buf + 14 + sizeof(net_meta), jpg->data, jpg->metadata->size);  // copy jpeg data
-        memcpy(buf + 14 + sizeof(net_meta) + jpg->metadata->size, "FEND", 4); // copy FEND
-        pthread_mutex_unlock(&net_img_lock);
+        pthread_mutex_lock(&net_img_lock);
         if (jpg->metadata->size > 0)
         {
+            int sz = 0;
+            int32_t out_sz = jpg->metadata->size + sizeof(net_meta) + 18; // total size = size of metadata + size of image + FBEGIN + FEND
+            unsigned char *buf = (unsigned char *)malloc(out_sz);         // image size + image data area
+            memcpy(buf, "SIZE", 4);
+            memcpy(buf + 4, &out_sz, 4);
+            memcpy(buf + 8, "FBEGIN", 6);                                         // copy FBEGIN
+            memcpy(buf + 14, jpg->metadata, sizeof(net_meta));                    // copy metadata
+            memcpy(buf + 14 + sizeof(net_meta), jpg->data, jpg->metadata->size);  // copy jpeg data
+            memcpy(buf + 14 + sizeof(net_meta) + jpg->metadata->size, "FEND", 4); // copy FEND
             sz = send(new_socket, buf, out_sz, MSG_NOSIGNAL);
             if (sz > 0)
                 cout << "Sent: " << sz << " bytes of " << out_sz << " bytes, image: " << jpg->metadata->size << " bytes" << endl;
+            if (sz <= 0)
+                conn_rdy = false;
+            jpg->metadata->size = 0; // indicate data has been sent
+            free(buf);
         }
-        else
-            sz = -1;
+        pthread_mutex_unlock(&net_img_lock);
         // eprintf("%s: Sent %d bytes: %s", __func__, sz, hello);
-        if (sz < 0 && !done)
+        if ((!conn_rdy) && (!done))
         {
             if ((new_socket = accept(server_fd, (struct sockaddr *)&address,
                                      (socklen_t *)&addrlen)) < 0)
@@ -504,7 +506,8 @@ void *cmd_fcn(void *img)
 #endif
             }
         }
-        free(buf);
+        else
+            conn_rdy = true;
         usleep(1000000 / 2); // 30 Hz
     }
 

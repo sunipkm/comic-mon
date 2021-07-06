@@ -593,7 +593,7 @@ int main(int, char **)
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
             if (conn_rdy && sock > 0)
             {
-                if (ImGui::InputInt("JPEG Quality", &jpg_qty, 1, 10))
+                if (ImGui::InputInt("JPEG Quality", &jpg_qty, 1, 10, ImGuiInputTextFlags_EnterReturnsTrue))
                 {
                     memset(atikcmd, 0x0, sizeof(net_cmd));
                     atikcmd->jpeg_quality = jpg_qty;
