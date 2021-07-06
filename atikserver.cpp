@@ -156,8 +156,8 @@ public:
     void convert_jpeg_image(unsigned short *data, unsigned width, unsigned height)
     {
         // convert grayscale data first
-        unsigned char *gr_data = (unsigned char *)malloc(width * height * 4);
-        this->data = (unsigned char *)malloc(1024 * 1024 * 3); // allocate 4M
+        unsigned char *gr_data = (unsigned char *)malloc(width * height * 3);
+        this->data = (unsigned char *)malloc(1024 * 1024 * 4); // allocate 4M
         for (unsigned long long i = 0; i < width * height; i++)
         {
             unsigned char tmp = data[i] / 256;
@@ -192,7 +192,7 @@ public:
         jpeg_set_defaults(&cinfo);
         jpeg_set_quality(&cinfo, jpeg_quality, TRUE);
         jpeg_start_compress(&cinfo, TRUE);
-        row_stride = width; // unsigned char
+        row_stride = width * cinfo.input_components; // unsigned char
         while (cinfo.next_scanline < height)
         {
             row_pointer[0] = &(gr_data[cinfo.next_scanline * row_stride]);
