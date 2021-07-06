@@ -865,6 +865,8 @@ int main(int argc, char *argv[])
         if (curr_exposure == num_exposures)
         {
             exposing = 0;
+            num_exposures = 0;
+            curr_exposure = 0;
         }
         if (props == NULL)
         {
