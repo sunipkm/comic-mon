@@ -293,6 +293,7 @@ typedef struct __attribute__((packed))
     char exposing;
     char num_exposures;
     char curr_exposure;
+    char jpeg_quality;
     int size;
 } net_meta;
 
@@ -614,6 +615,7 @@ int main(int, char **)
                 strftime(buf, sizeof(buf), "%a %Y-%m-%d %H:%M:%S %Z", &ts);
                 ImGui::Text(u8"Timestamp: %s | Exposure: %.3f s | CCD Temp: %.2f °C", buf, img.metadata->exposure, img.metadata->temp);
                 ImGui::Text(u8"Recording exposures: %s | On exposure: %d | Total Exposures: %d", img.metadata->exposing ? "YES" : "NO ", img.metadata->curr_exposure, img.metadata->num_exposures);
+                jpg_qty = img.metadata->jpeg_quality;
                 imagedata live_image;
                 live_image.max_size = 1024*1024*4*2;
                 live_image.data = (unsigned char *)malloc(live_image.max_size);

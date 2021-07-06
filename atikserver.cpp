@@ -229,6 +229,7 @@ typedef struct __attribute__((packed))
     char exposing;
     char num_exposures;
     char curr_exposure;
+    char jpeg_quality;
     int size;
 } net_meta;
 
@@ -836,6 +837,7 @@ int main(int argc, char *argv[])
         cout << "Exposure: " << ext_img->metadata->exposure << endl;
         ext_img->metadata->size = img.copy_image(ext_img->data);
         cout << "Size: " << ext_img->metadata->size << endl;
+        ext_img->metadata->jpeg_quality = jpeg_image::jpeg_quality;
         if (exposing)
         {
             ext_img->metadata->curr_exposure = curr_exposure;
