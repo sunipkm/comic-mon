@@ -19,6 +19,12 @@
 #include <signal.h>
 #include <errno.h>
 
+#define eprintf(str, ...) \
+{ \
+    fprintf(stderr, "%s,%d: " str "\n", __func__, __LINE__, ##__VA_ARGS__); \
+    fflush(stderr); \
+}
+
 int connect_w_tout(int soc, const struct sockaddr *addr, socklen_t sock_sz, int tout_s)
 {
     int res;
@@ -284,8 +290,20 @@ typedef struct __attribute__((packed))
     float temp;
     float exposure;
     uint64_t tstamp;
+    char exposing;
+    char num_exposures;
+    char curr_exposure;
     int size;
 } net_meta;
+
+typedef struct __attribute__((packed))
+{
+    char jpeg_quality;   // JPEG quality
+    char start_exposure; // start exposure command
+    char stop_exposure;  // stop exposure command
+    char num_exposures;  // number of exposures
+    double exposure;     // exposure time
+} net_cmd;
 
 typedef struct
 {
@@ -295,6 +313,7 @@ typedef struct
 } net_image;
 
 net_image img;
+net_cmd atikcmd[1];
 
 static char rcv_buf[1024 * 1024];
 
@@ -346,25 +365,39 @@ void *rcv_thr(void *sock)
         usleep(1000 * 1000 / 30); // receive at 120 Hz
         if (conn_rdy)
         {
-            // char tmp_buf[8];
-            // ssize_t sz = recv(*(int *)sock, tmp_buf, sizeof(tmp_buf), 0);
-            // if (sz <= 0)
-            //     continue; // did not receive anything
-            // else
-            //     fprintf(stderr, "Received: %ld bytes\n", sz);
-            // fprintf(stderr, "Received: %c%c%c%c%d", tmp_buf[0], tmp_buf[1], tmp_buf[2], tmp_buf[3], *(int *)(&tmp_buf[4]));
-            // if (tmp_buf[0] == 'H' && tmp_buf[1] == 'E' && tmp_buf[2] == 'A' && tmp_buf[3] == 'D')
-            // {
-            //     sz = *(int32_t *)(&tmp_buf[4]);
-            //     fprintf(stderr, "Data to receive: %ld bytes\n", sz);
-            // }
-            // else
-            //     continue;
             int offset = 0;
             char *head = NULL, *tail = NULL;
+            // retrieve SIZE
             do
             {
-                int sz = recv(*(int *)sock, rcv_buf + offset, sizeof(rcv_buf) - offset, 0);
+                int sz = recv(*(int *)sock, rcv_buf, 1, 0);
+                if (sz <= 0)
+                    continue;
+                if (rcv_buf[0] == 'S')
+                {
+                    offset = 1;
+                    do
+                    {
+                        offset += recv(*(int *)sock, rcv_buf + offset, 3, 0); // receive SIZE
+                    } while((offset < 4) && conn_rdy);
+                }
+                if ((rcv_buf[0] == 'S') && (rcv_buf[1] == 'I') && (rcv_buf[2] == 'Z') && (rcv_buf[3] == 'E'))
+                    break;
+            } while(conn_rdy);
+            // read size of buffer
+            int payload_sz = 0;
+            offset = 0;
+            do
+            {
+                char *psz = (char *) &payload_sz;
+                offset += recv(*(int *)sock, psz + offset, sizeof(int), 0);
+            } while ((offset < 4) && conn_rdy);
+            // now we have payload size
+            eprintf("Payload size: %d", payload_sz);
+            offset = 0;
+            do
+            {
+                int sz = recv(*(int *)sock, rcv_buf + offset, payload_sz - offset, 0);
                 if (sz < 0)
                     continue;
                 offset += sz;
@@ -562,9 +595,9 @@ int main(int, char **)
             {
                 if (ImGui::InputInt("JPEG Quality", &jpg_qty, 1, 10))
                 {
-                    static char msg[1024];
-                    int sz = snprintf(msg, 1024, "CMD_JPEG_SET_QUALITY%d", jpg_qty);
-                    send(sock, msg, sz, 0);
+                    memset(atikcmd, 0x0, sizeof(net_cmd));
+                    atikcmd->jpeg_quality = jpg_qty;
+                    send(sock, atikcmd, sizeof(net_cmd), 0);
                 }
             }
             if (conn_rdy && sock > 0)

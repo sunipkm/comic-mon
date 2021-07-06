@@ -226,8 +226,20 @@ typedef struct __attribute__((packed))
     float temp;
     float exposure;
     uint64_t tstamp;
+    char exposing;
+    char num_exposures;
+    char curr_exposure;
     int size;
 } net_meta;
+
+typedef struct __attribute__((packed))
+{
+    char jpeg_quality;   // JPEG quality
+    char start_exposure; // start exposure command
+    char stop_exposure;  // stop exposure command
+    char num_exposures;  // number of exposures
+    double exposure;     // exposure time
+} net_cmd;
 
 pthread_mutex_t net_img_lock;
 
@@ -358,29 +370,33 @@ void sig_handler(int in)
 }
 #define PORT 12395
 
+net_cmd atikcmd[1];
+
 void *cmd_rcv_fcn(void *sock)
 {
-    char buffer[1024] = {0};
     while (!done)
     {
         if (*(int *)sock > 0)
         {
-            int sz = recv(*(int *)sock, buffer, sizeof(buffer), MSG_NOSIGNAL);
-            if (sz > 0)
+            int offset = 0;
+            do
             {
-                eprintf("Received command: %s, ", buffer);
-                if (strstr(buffer, "CMD_JPEG_SET_QUALITY") != NULL)
-                {
-                    int tmp = strtol(&buffer[20], NULL, 10);
-                    if (tmp > 100)
-                        tmp = 100;
-                    else if (tmp < 0)
-                        tmp = 70;
-                    eprintf("decoded jpeg quality: %d\n", tmp);
-                    jpeg_image::set_jpeg_quality(tmp);
-                }
+                int sz = recv(*(int *)sock, (char *)atikcmd + offset, sizeof(net_cmd) - offset, MSG_NOSIGNAL);
+                if (sz < 0)
+                    continue;
+                offset += sz;
+            } while (!done && (offset < sizeof(net_cmd)));
+
+            if (offset == sizeof(net_cmd)) // valid command
+            {
+                int tmp = atikcmd->jpeg_quality;
+                if (tmp > 100)
+                    tmp = 100;
+                else if (tmp < 0)
+                    tmp = 70;
+                eprintf("decoded jpeg quality: %d\n", tmp);
+                jpeg_image::set_jpeg_quality(tmp);
             }
-            memset(buffer, 0x0, 1024);
         }
         usleep(1000000 / 60); // receive a command at 60 Hz
     }
@@ -695,7 +711,7 @@ public:
         if (img->tstamp == 0) // not snapped
             return false;
         char fileName[256];
-        snprintf(fileName, sizeof(fileName), "fits/%llu.fit[compress]", img->tstamp/1000);
+        snprintf(fileName, sizeof(fileName), "fits/%llu.fit[compress]", img->tstamp / 1000);
         fitsfile *fptr;
         int status = 0, bitpix = USHORT_IMG, naxis = 2;
         int bzero = 32768, bscale = 1;
@@ -723,6 +739,8 @@ public:
 int main(int argc, char *argv[])
 {
     bool saveFit = true; // mark false if not needed
+    char exposing = 0;
+    double const_exposure = 0;
     signal(SIGINT, sig_handler);
     gpioSetMode(11, GPIO_OUT);
     gpioWrite(11, GPIO_HIGH);
