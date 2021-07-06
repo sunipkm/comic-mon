@@ -859,12 +859,12 @@ int main(int argc, char *argv[])
             props = device->snapPicture(const_binning, const_exposure);
             curr_exposure++;
         }
-        else if (curr_exposure == num_exposures)
+        else
+            props = device->snapPicture(binning, exposure);
+        if (curr_exposure == num_exposures)
         {
             exposing = 0;
         }
-        else
-            props = device->snapPicture(binning, exposure);
         if (props == NULL)
         {
             eprintf("Props is null");
