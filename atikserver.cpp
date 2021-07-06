@@ -775,14 +775,8 @@ public:
     }
 };
 
-void cleanup_exit(void)
-{
-    gpioWrite(11, GPIO_LOW);
-}
-
 int main(int argc, char *argv[])
 {
-    atexit(cleanup_exit);
     bool saveFit = true; // mark false if not needed
     char exposing = 0;
     double const_exposure = 0;
@@ -928,5 +922,6 @@ int main(int argc, char *argv[])
 end:
     free(ext_img->metadata);
     free(ext_img);
+    gpioWrite(11, GPIO_LOW);
     return 0;
 }
