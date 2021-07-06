@@ -163,15 +163,15 @@ public:
             unsigned char tmp = data[i] / 256;
             if (data[i] == 65535) // saturated
             {
-                gr_data[4 * i] = 0xff;
-                gr_data[4 * i + 1] = 0;
-                gr_data[4 * i + 2] = 0;
+                gr_data[3 * i] = 0xff;
+                gr_data[3 * i + 1] = 0;
+                gr_data[3 * i + 2] = 0;
             }
             else
             {
-                gr_data[4 * i] = tmp;
-                gr_data[4 * i + 1] = tmp;
-                gr_data[4 * i + 2] = tmp;
+                gr_data[3 * i] = tmp;
+                gr_data[3 * i + 1] = tmp;
+                gr_data[3 * i + 2] = tmp;
             }
             // gr_data[i] = data[i] / 256; // convert to 8 bit grayscale
         }
@@ -187,7 +187,7 @@ public:
         cinfo.image_height = height;
         cinfo.scale_denom = 1;
         cinfo.scale_num = 1;
-        cinfo.input_components = 1;
+        cinfo.input_components = 3;
         cinfo.in_color_space = JCS_RGB; //JCS_GRAYSCALE;
         jpeg_set_defaults(&cinfo);
         jpeg_set_quality(&cinfo, jpeg_quality, TRUE);
