@@ -156,16 +156,22 @@ public:
     void convert_jpeg_image(unsigned short *data, unsigned width, unsigned height)
     {
         // convert grayscale data first
-        unsigned char *gr_data = (unsigned char *)malloc(width * height);
-        this->data = (unsigned char *)malloc(1024 * 1024 * 4); // allocate 4M
+        unsigned char *gr_data = (unsigned char *)malloc(width * height * 4);
+        this->data = (unsigned char *)malloc(1024 * 1024 * 3); // allocate 4M
         for (unsigned long long i = 0; i < width * height; i++)
         {
             unsigned char tmp = data[i] / 256;
             if (data[i] == 65535) // saturated
-                gr_data[i] = 0xff000000;
+            {
+                gr_data[4 * i] = 0xff;
+                gr_data[4 * i + 1] = 0;
+                gr_data[4 * i + 2] = 0;
+            }
             else
             {
-                gr_data[i] = (tmp << 24) | (tmp << 16) | (tmp << 8) | 0xff;
+                gr_data[4 * i] = tmp;
+                gr_data[4 * i + 1] = tmp;
+                gr_data[4 * i + 2] = tmp;
             }
             // gr_data[i] = data[i] / 256; // convert to 8 bit grayscale
         }
@@ -182,7 +188,7 @@ public:
         cinfo.scale_denom = 1;
         cinfo.scale_num = 1;
         cinfo.input_components = 1;
-        cinfo.in_color_space = JCS_EXT_RGBA;//JCS_GRAYSCALE;
+        cinfo.in_color_space = JCS_RGB; //JCS_GRAYSCALE;
         jpeg_set_defaults(&cinfo);
         jpeg_set_quality(&cinfo, jpeg_quality, TRUE);
         jpeg_start_compress(&cinfo, TRUE);
