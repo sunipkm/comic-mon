@@ -160,7 +160,14 @@ public:
         this->data = (unsigned char *)malloc(1024 * 1024 * 4); // allocate 4M
         for (unsigned long long i = 0; i < width * height; i++)
         {
-            gr_data[i] = data[i] / 256; // convert to 8 bit grayscale
+            unsigned char tmp = data[i] / 256;
+            if (data[i] == 65535) // saturated
+                gr_data[i] = 0xff000000;
+            else
+            {
+                gr_data[i] = (tmp << 24) | (tmp << 16) | (tmp << 8) | 0xff;
+            }
+            // gr_data[i] = data[i] / 256; // convert to 8 bit grayscale
         }
         struct jpeg_compress_struct cinfo;
         struct jpeg_error_mgr jerr;
@@ -175,7 +182,7 @@ public:
         cinfo.scale_denom = 1;
         cinfo.scale_num = 1;
         cinfo.input_components = 1;
-        cinfo.in_color_space = JCS_GRAYSCALE;
+        cinfo.in_color_space = JCS_EXT_RGBA;//JCS_GRAYSCALE;
         jpeg_set_defaults(&cinfo);
         jpeg_set_quality(&cinfo, jpeg_quality, TRUE);
         jpeg_start_compress(&cinfo, TRUE);
