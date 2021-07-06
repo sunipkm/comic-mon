@@ -828,6 +828,10 @@ int main(int argc, char *argv[])
             if (atikcmd->start_exposure && (!exposing))
             {
                 const_exposure = atikcmd->exposure;
+                if (const_exposure < 0.001)
+                    const_exposure = 0.001;
+                else if (const_exposure > 10)
+                    const_exposure = 10;
                 exposing = 1; // indicate we are exposing
                 num_exposures = atikcmd->num_exposures;
                 curr_exposure = 0;
@@ -850,10 +854,14 @@ int main(int argc, char *argv[])
             valid_cmd = false;
         }
         AtikImage *props = NULL;
-        if (exposing)
+        if (exposing && (curr_exposure < num_exposures))
         {
             props = device->snapPicture(const_binning, const_exposure);
             curr_exposure++;
+        }
+        else if (curr_exposure == num_exposures)
+        {
+            exposing = 0;
         }
         else
             props = device->snapPicture(binning, exposure);
@@ -881,11 +889,11 @@ int main(int argc, char *argv[])
         ext_img->metadata->size = img.copy_image(ext_img->data);
         cout << "Size: " << ext_img->metadata->size << endl;
         ext_img->metadata->jpeg_quality = jpeg_image::jpeg_quality;
+        ext_img->metadata->exposing = exposing;
         if (exposing)
         {
             ext_img->metadata->curr_exposure = curr_exposure;
             ext_img->metadata->num_exposures = num_exposures;
-            ext_img->metadata->exposing = exposing;
             char prefix[100];
             snprintf(prefix, 100, "%s_set%d_%.3lf_%d_%d", file_prefix, exposure_set, const_exposure, curr_exposure, num_exposures);
             device->saveFits(prefix);

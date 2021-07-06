@@ -594,10 +594,11 @@ int main(int, char **)
                 }
             }
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-            bool send_cmd = false;
+            static bool send_cmd = false;
             static int binning = 1;
             bool start_exposure = false;
             static bool stop_exposure = false;
+            static float sys_exposure = 0.001;
             if (conn_rdy && sock > 0)
             {
                 if (ImGui::InputInt("JPEG Quality", &jpg_qty, 1, 10, ImGuiInputTextFlags_EnterReturnsTrue))
@@ -622,9 +623,17 @@ int main(int, char **)
                     if (num_exposures > 127)
                         num_exposures = 127;
                 }
+                if (ImGui::InputFloat("Exposure", &sys_exposure, 0, 0, "%.3f", ImGuiInputTextFlags_EnterReturnsTrue))
+                {
+                    if (sys_exposure < 0.001)
+                        sys_exposure = 0.001;
+                    else if (sys_exposure > 10)
+                        sys_exposure = 10;
+                }
                 if (ImGui::Button("Start Exposure"))
                 {
                     start_exposure = true;
+                    send_cmd = true;
                 }
                 if (send_cmd)
                 {
@@ -663,6 +672,7 @@ int main(int, char **)
                     if (img.metadata->exposing)
                     {
                         stop_exposure = true;
+                        send_cmd = true;
                     }
                 }
                 jpg_qty = img.metadata->jpeg_quality;
