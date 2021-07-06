@@ -780,7 +780,7 @@ int main(int argc, char *argv[])
     bool saveFit = true; // mark false if not needed
     char exposing = 0;
     double const_exposure = 0;
-    char num_exposures, curr_exposure;
+    char num_exposures = 0, curr_exposure = 0;
     static int exposure_set = 0;
     int binning = 1, const_binning = 1;
     int file_prefix[10];
