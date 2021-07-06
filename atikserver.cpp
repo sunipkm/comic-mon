@@ -371,6 +371,7 @@ void sig_handler(int in)
 #define PORT 12395
 
 net_cmd atikcmd[1];
+bool valid_cmd = false;
 
 void *cmd_rcv_fcn(void *sock)
 {
@@ -389,6 +390,7 @@ void *cmd_rcv_fcn(void *sock)
 
             if (offset == sizeof(net_cmd)) // valid command
             {
+                valid_cmd = true;
                 int tmp = atikcmd->jpeg_quality;
                 if (tmp > 100)
                     tmp = 100;
@@ -742,6 +744,7 @@ int main(int argc, char *argv[])
     bool saveFit = true; // mark false if not needed
     char exposing = 0;
     double const_exposure = 0;
+    char num_exposures, curr_exposure;
     signal(SIGINT, sig_handler);
     gpioSetMode(11, GPIO_OUT);
     gpioWrite(11, GPIO_HIGH);
@@ -781,7 +784,33 @@ int main(int argc, char *argv[])
     }
     while (!done)
     {
-        AtikImage *props = device->snapPicture(1, exposure);
+        if (valid_cmd)
+        {
+            if (atikcmd->start_exposure && (!exposing))
+            {
+                const_exposure = atikcmd->exposure;
+                exposing = 1; // indicate we are exposing
+                num_exposures = atikcmd->num_exposures;
+                curr_exposure = 0;
+                atikcmd->start_exposure = 0;
+            }
+            else if (exposing && atikcmd->stop_exposure)
+            {
+                exposing = 0;
+                num_exposures = 0;
+                curr_exposure = 0;
+                atikcmd->stop_exposure = 0;
+            }
+            valid_cmd = false;
+        }
+        AtikImage *props = NULL;
+        if (exposing)
+        {
+            props = device->snapPicture(1, const_exposure);
+            curr_exposure++;
+        }
+        else
+            props = device->snapPicture(1, exposure);
         if (props == NULL)
         {
             eprintf("Props is null");
@@ -807,13 +836,22 @@ int main(int argc, char *argv[])
         cout << "Exposure: " << ext_img->metadata->exposure << endl;
         ext_img->metadata->size = img.copy_image(ext_img->data);
         cout << "Size: " << ext_img->metadata->size << endl;
+        if (exposing)
+        {
+            ext_img->metadata->curr_exposure = curr_exposure;
+            ext_img->metadata->num_exposures = num_exposures;
+            ext_img->metadata->exposing = exposing;
+        }
         pthread_mutex_unlock(&net_img_lock);
-        if (!done)
-            exposure = find_optimum_exposure(props->data, props->width * props->height, exposure);
-        if (exposure < device->minShortExp)
-            exposure = device->minShortExp;
-        if (exposure > MAX_ALLOWED_EXPOSURE)
-            exposure = MAX_ALLOWED_EXPOSURE;
+        if (!exposing)
+        {
+            if (!done)
+                exposure = find_optimum_exposure(props->data, props->width * props->height, exposure);
+            if (exposure < device->minShortExp)
+                exposure = device->minShortExp;
+            if (exposure > MAX_ALLOWED_EXPOSURE)
+                exposure = MAX_ALLOWED_EXPOSURE;
+        }
     }
     cout << "main: Out of loop" << endl
          << flush;

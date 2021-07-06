@@ -613,6 +613,7 @@ int main(int, char **)
                 ts = *localtime(&tstamp.tv_sec);
                 strftime(buf, sizeof(buf), "%a %Y-%m-%d %H:%M:%S %Z", &ts);
                 ImGui::Text(u8"Timestamp: %s | Exposure: %.3f s | CCD Temp: %.2f °C", buf, img.metadata->exposure, img.metadata->temp);
+                ImGui::Text(u8"Recording exposures: %s | On exposure: %d | Total Exposures: %d", img.metadata->exposing ? "YES" : "NO ", img.metadata->curr_exposure, img.metadata->num_exposures);
                 imagedata live_image;
                 live_image.max_size = 1024*1024*4*2;
                 live_image.data = (unsigned char *)malloc(live_image.max_size);
