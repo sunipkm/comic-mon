@@ -789,8 +789,8 @@ int main(int argc, char *argv[])
     gpioWrite(11, GPIO_HIGH);
     sleep(1);
     Atik414ex *device = new Atik414ex();
-    double exposure;
-    bool success;
+    double exposure = 0.001;
+    bool success = false;
 
     unsigned short tmp[device->getMaxSize()];
 
