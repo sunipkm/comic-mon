@@ -632,6 +632,8 @@ int main(int, char **)
                         sys_exposure = 0.001;
                     else if (sys_exposure > 10)
                         sys_exposure = 10;
+                    if (!autoexposure)
+                        send_cmd = true;
                 }
                 if (ImGui::Button("Start Exposure"))
                 {
