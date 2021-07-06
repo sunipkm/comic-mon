@@ -501,8 +501,6 @@ void *cmd_fcn(void *img)
             {
 #ifdef SERVER_DEBUG
                 perror("accept");
-#else
-                sz = -1;
 #endif
             }
         }
